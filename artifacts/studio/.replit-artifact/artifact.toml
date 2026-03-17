@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Studio Management Platform"
+version = "1.0.0"
+id = "artifacts/studio"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+localPort = 18425
+name = "web"
+paths = ["/"]
+
+[services.development]
+run = "pnpm --filter @workspace/studio run dev"
+
+[services.env]
+PORT = "18425"
+BASE_PATH = "/"
+
+[services.production]
+build = ["pnpm", "--filter", "@workspace/studio", "run", "build"]
+publicDir = "artifacts/studio/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"

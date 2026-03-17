@@ -1,22 +1,39 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Studio Management Platform API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication operations
+  - name: users
+    description: User management
+  - name: projects
+    description: Project management
+  - name: phases
+    description: Project phase management
+  - name: timeblocks
+    description: Time blocks / calendar entries
+  - name: allocations
+    description: Resource allocations
+  - name: invoices
+    description: Invoice management
+  - name: expenses
+    description: Expense tracking
+  - name: clients
+    description: Client management
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,7 +41,751 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /auth/user:
+    get:
+      operationId: getCurrentAuthUser
+      tags: [auth]
+      summary: Get current authenticated user
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+      responses:
+        "200":
+          description: Current user auth state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetCurrentAuthUserResponse"
+
+  /login:
+    get:
+      tags: [auth]
+      operationId: beginBrowserLogin
+      summary: Start the browser OIDC login flow
+      parameters:
+        - name: returnTo
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "302":
+          description: Redirect to the OIDC authorization endpoint.
+
+  /callback:
+    get:
+      tags: [auth]
+      operationId: handleBrowserLoginCallback
+      summary: Complete the browser OIDC login flow
+      responses:
+        "302":
+          description: Redirect after login.
+
+  /logout:
+    get:
+      tags: [auth]
+      operationId: logoutBrowserSession
+      summary: Clear the session
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+      responses:
+        "302":
+          description: Redirect to OIDC logout.
+
+  /mobile-auth/token-exchange:
+    post:
+      tags: [auth]
+      operationId: exchangeMobileAuthorizationCode
+      summary: Exchange a mobile OIDC code for a session token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MobileTokenExchangeRequest"
+      responses:
+        "200":
+          description: Session created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExchangeMobileAuthorizationCodeResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /mobile-auth/logout:
+    post:
+      tags: [auth]
+      operationId: logoutMobileSession
+      summary: Delete a mobile session token
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+      responses:
+        "200":
+          description: Logout processed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LogoutMobileSessionResponse"
+
+  /users:
+    get:
+      operationId: listUsers
+      tags: [users]
+      summary: List all users
+      responses:
+        "200":
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+
+  /users/{id}:
+    get:
+      operationId: getUser
+      tags: [users]
+      summary: Get a user by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: User details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /clients:
+    get:
+      operationId: listClients
+      tags: [clients]
+      summary: List all clients
+      responses:
+        "200":
+          description: List of clients
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Client"
+    post:
+      operationId: createClient
+      tags: [clients]
+      summary: Create a new client
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateClientRequest"
+      responses:
+        "201":
+          description: Created client
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Client"
+
+  /clients/{id}:
+    get:
+      operationId: getClient
+      tags: [clients]
+      summary: Get a client by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Client details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Client"
+    put:
+      operationId: updateClient
+      tags: [clients]
+      summary: Update a client
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateClientRequest"
+      responses:
+        "200":
+          description: Updated client
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Client"
+
+  /projects:
+    get:
+      operationId: listProjects
+      tags: [projects]
+      summary: List all projects
+      responses:
+        "200":
+          description: List of projects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Project"
+    post:
+      operationId: createProject
+      tags: [projects]
+      summary: Create a new project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProjectRequest"
+      responses:
+        "201":
+          description: Created project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+
+  /projects/{id}:
+    get:
+      operationId: getProject
+      tags: [projects]
+      summary: Get a project by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Project details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+    put:
+      operationId: updateProject
+      tags: [projects]
+      summary: Update a project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProjectRequest"
+      responses:
+        "200":
+          description: Updated project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+
+  /projects/{id}/phases:
+    get:
+      operationId: listProjectPhases
+      tags: [phases]
+      summary: List phases for a project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of phases
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Phase"
+    post:
+      operationId: createPhase
+      tags: [phases]
+      summary: Create a phase for a project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePhaseRequest"
+      responses:
+        "201":
+          description: Created phase
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Phase"
+
+  /phases/{id}:
+    put:
+      operationId: updatePhase
+      tags: [phases]
+      summary: Update a phase
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePhaseRequest"
+      responses:
+        "200":
+          description: Updated phase
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Phase"
+    delete:
+      operationId: deletePhase
+      tags: [phases]
+      summary: Delete a phase
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Phase deleted
+
+  /allocations:
+    get:
+      operationId: listAllocations
+      tags: [allocations]
+      summary: List all allocations
+      parameters:
+        - name: userId
+          in: query
+          schema:
+            type: string
+        - name: projectId
+          in: query
+          schema:
+            type: string
+        - name: weekStart
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: weekEnd
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: List of allocations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Allocation"
+    post:
+      operationId: createAllocation
+      tags: [allocations]
+      summary: Create a resource allocation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAllocationRequest"
+      responses:
+        "201":
+          description: Created allocation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Allocation"
+
+  /allocations/{id}:
+    put:
+      operationId: updateAllocation
+      tags: [allocations]
+      summary: Update an allocation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAllocationRequest"
+      responses:
+        "200":
+          description: Updated allocation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Allocation"
+    delete:
+      operationId: deleteAllocation
+      tags: [allocations]
+      summary: Delete an allocation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Allocation deleted
+
+  /timeblocks:
+    get:
+      operationId: listTimeBlocks
+      tags: [timeblocks]
+      summary: List time blocks
+      parameters:
+        - name: userId
+          in: query
+          schema:
+            type: string
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: projectId
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of time blocks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TimeBlock"
+    post:
+      operationId: createTimeBlock
+      tags: [timeblocks]
+      summary: Create a time block
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTimeBlockRequest"
+      responses:
+        "201":
+          description: Created time block
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TimeBlock"
+
+  /timeblocks/{id}:
+    put:
+      operationId: updateTimeBlock
+      tags: [timeblocks]
+      summary: Update a time block
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTimeBlockRequest"
+      responses:
+        "200":
+          description: Updated time block
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TimeBlock"
+    delete:
+      operationId: deleteTimeBlock
+      tags: [timeblocks]
+      summary: Delete a time block
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Time block deleted
+
+  /utilization:
+    get:
+      operationId: getUtilization
+      tags: [allocations]
+      summary: Get team utilization data
+      parameters:
+        - name: weekStart
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: weekEnd
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Team utilization summary
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UserUtilization"
+
+  /invoices:
+    get:
+      operationId: listInvoices
+      tags: [invoices]
+      summary: List all invoices
+      parameters:
+        - name: projectId
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, sent, paid, overdue]
+      responses:
+        "200":
+          description: List of invoices
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Invoice"
+    post:
+      operationId: createInvoice
+      tags: [invoices]
+      summary: Create an invoice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInvoiceRequest"
+      responses:
+        "201":
+          description: Created invoice
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+
+  /invoices/{id}:
+    get:
+      operationId: getInvoice
+      tags: [invoices]
+      summary: Get an invoice by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Invoice details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+    put:
+      operationId: updateInvoice
+      tags: [invoices]
+      summary: Update an invoice
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateInvoiceRequest"
+      responses:
+        "200":
+          description: Updated invoice
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+
+  /expenses:
+    get:
+      operationId: listExpenses
+      tags: [expenses]
+      summary: List all expenses
+      parameters:
+        - name: projectId
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of expenses
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Expense"
+    post:
+      operationId: createExpense
+      tags: [expenses]
+      summary: Create an expense
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateExpenseRequest"
+      responses:
+        "201":
+          description: Created expense
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Expense"
+
+  /expenses/{id}:
+    put:
+      operationId: updateExpense
+      tags: [expenses]
+      summary: Update an expense
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateExpenseRequest"
+      responses:
+        "200":
+          description: Updated expense
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Expense"
+    delete:
+      operationId: deleteExpense
+      tags: [expenses]
+      summary: Delete an expense
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Expense deleted
+
 components:
+  parameters:
+    AuthorizationSessionHeader:
+      name: Authorization
+      in: header
+      required: false
+      description: Opaque session token — Bearer <sid>.
+      schema:
+        type: string
+    SessionCookie:
+      name: sid
+      in: cookie
+      required: false
+      description: Browser session cookie.
+      schema:
+        type: string
+
   schemas:
     HealthStatus:
       type: object
@@ -34,3 +795,877 @@ components:
       required:
         - status
 
+    GetCurrentAuthUserResponse:
+      type: object
+      properties:
+        authenticated:
+          type: boolean
+        user:
+          $ref: "#/components/schemas/User"
+      required:
+        - authenticated
+
+    MobileTokenExchangeRequest:
+      type: object
+      required: [code, code_verifier, redirect_uri, state]
+      properties:
+        code:
+          type: string
+        code_verifier:
+          type: string
+        redirect_uri:
+          type: string
+        state:
+          type: string
+        nonce:
+          type: string
+
+    ExchangeMobileAuthorizationCodeBody:
+      type: object
+      required: [code, code_verifier, redirect_uri, state]
+      properties:
+        code:
+          type: string
+        code_verifier:
+          type: string
+        redirect_uri:
+          type: string
+        state:
+          type: string
+        nonce:
+          type: string
+
+    ExchangeMobileAuthorizationCodeResponse:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+
+    LogoutMobileSessionResponse:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+        replitId:
+          type: string
+        username:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+        profileImage:
+          type: string
+          nullable: true
+        role:
+          type: string
+          enum: [designer, pm, admin]
+        hourlyRate:
+          type: number
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - replitId
+        - username
+        - role
+        - createdAt
+
+    Client:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - createdAt
+
+    CreateClientRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+      required:
+        - name
+
+    Project:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        clientId:
+          type: string
+          nullable: true
+        clientName:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [active, on_hold, completed, cancelled]
+        type:
+          type: string
+          enum: [branding, web, interior, architecture, other]
+        budgetedHours:
+          type: number
+        loggedHours:
+          type: number
+        budgetAmount:
+          type: number
+          nullable: true
+        billedAmount:
+          type: number
+        startDate:
+          type: string
+          format: date
+          nullable: true
+        endDate:
+          type: string
+          format: date
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        color:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - status
+        - type
+        - budgetedHours
+        - loggedHours
+        - billedAmount
+        - createdAt
+
+    CreateProjectRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        clientId:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [active, on_hold, completed, cancelled]
+        type:
+          type: string
+          enum: [branding, web, interior, architecture, other]
+        budgetedHours:
+          type: number
+        budgetAmount:
+          type: number
+          nullable: true
+        startDate:
+          type: string
+          format: date
+          nullable: true
+        endDate:
+          type: string
+          format: date
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        color:
+          type: string
+          nullable: true
+      required:
+        - name
+        - status
+        - type
+        - budgetedHours
+
+    UpdateProjectRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        clientId:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [active, on_hold, completed, cancelled]
+        type:
+          type: string
+          enum: [branding, web, interior, architecture, other]
+        budgetedHours:
+          type: number
+        budgetAmount:
+          type: number
+          nullable: true
+        startDate:
+          type: string
+          format: date
+          nullable: true
+        endDate:
+          type: string
+          format: date
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        color:
+          type: string
+          nullable: true
+
+    Phase:
+      type: object
+      properties:
+        id:
+          type: string
+        projectId:
+          type: string
+        name:
+          type: string
+        budgetedHours:
+          type: number
+        loggedHours:
+          type: number
+        startDate:
+          type: string
+          format: date
+          nullable: true
+        endDate:
+          type: string
+          format: date
+          nullable: true
+        status:
+          type: string
+          enum: [upcoming, in_progress, completed]
+        kickoffDate:
+          type: string
+          format: date
+          nullable: true
+        deadlineDate:
+          type: string
+          format: date
+          nullable: true
+        pageTurnDate:
+          type: string
+          format: date
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - projectId
+        - name
+        - budgetedHours
+        - loggedHours
+        - status
+        - createdAt
+
+    CreatePhaseRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        budgetedHours:
+          type: number
+        startDate:
+          type: string
+          format: date
+          nullable: true
+        endDate:
+          type: string
+          format: date
+          nullable: true
+        kickoffDate:
+          type: string
+          format: date
+          nullable: true
+        deadlineDate:
+          type: string
+          format: date
+          nullable: true
+        pageTurnDate:
+          type: string
+          format: date
+          nullable: true
+      required:
+        - name
+        - budgetedHours
+
+    UpdatePhaseRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        budgetedHours:
+          type: number
+        startDate:
+          type: string
+          format: date
+          nullable: true
+        endDate:
+          type: string
+          format: date
+          nullable: true
+        status:
+          type: string
+          enum: [upcoming, in_progress, completed]
+        kickoffDate:
+          type: string
+          format: date
+          nullable: true
+        deadlineDate:
+          type: string
+          format: date
+          nullable: true
+        pageTurnDate:
+          type: string
+          format: date
+          nullable: true
+
+    Allocation:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        userName:
+          type: string
+        projectId:
+          type: string
+        projectName:
+          type: string
+        projectColor:
+          type: string
+          nullable: true
+        phaseId:
+          type: string
+          nullable: true
+        phaseName:
+          type: string
+          nullable: true
+        allocatedHours:
+          type: number
+        loggedHours:
+          type: number
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - userId
+        - userName
+        - projectId
+        - projectName
+        - allocatedHours
+        - loggedHours
+        - startDate
+        - endDate
+        - createdAt
+
+    CreateAllocationRequest:
+      type: object
+      properties:
+        userId:
+          type: string
+        projectId:
+          type: string
+        phaseId:
+          type: string
+          nullable: true
+        allocatedHours:
+          type: number
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        notes:
+          type: string
+          nullable: true
+      required:
+        - userId
+        - projectId
+        - allocatedHours
+        - startDate
+        - endDate
+
+    UpdateAllocationRequest:
+      type: object
+      properties:
+        allocatedHours:
+          type: number
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        notes:
+          type: string
+          nullable: true
+
+    TimeBlock:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        userName:
+          type: string
+        projectId:
+          type: string
+        projectName:
+          type: string
+        projectColor:
+          type: string
+          nullable: true
+        phaseId:
+          type: string
+          nullable: true
+        phaseName:
+          type: string
+          nullable: true
+        allocationId:
+          type: string
+          nullable: true
+        date:
+          type: string
+          format: date
+        hours:
+          type: number
+        type:
+          type: string
+          enum: [work, meeting, kickoff, deadline, page_turn]
+        title:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        approved:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - userId
+        - userName
+        - projectId
+        - projectName
+        - date
+        - hours
+        - type
+        - approved
+        - createdAt
+
+    CreateTimeBlockRequest:
+      type: object
+      properties:
+        userId:
+          type: string
+        projectId:
+          type: string
+        phaseId:
+          type: string
+          nullable: true
+        allocationId:
+          type: string
+          nullable: true
+        date:
+          type: string
+          format: date
+        hours:
+          type: number
+        type:
+          type: string
+          enum: [work, meeting, kickoff, deadline, page_turn]
+        title:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+      required:
+        - userId
+        - projectId
+        - date
+        - hours
+        - type
+
+    UpdateTimeBlockRequest:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        hours:
+          type: number
+        type:
+          type: string
+          enum: [work, meeting, kickoff, deadline, page_turn]
+        title:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        approved:
+          type: boolean
+
+    UserUtilization:
+      type: object
+      properties:
+        userId:
+          type: string
+        userName:
+          type: string
+        profileImage:
+          type: string
+          nullable: true
+        allocatedHours:
+          type: number
+        loggedHours:
+          type: number
+        targetHours:
+          type: number
+        utilizationPercent:
+          type: number
+        status:
+          type: string
+          enum: [under, on_track, over]
+        projects:
+          type: array
+          items:
+            type: object
+            properties:
+              projectId:
+                type: string
+              projectName:
+                type: string
+              projectColor:
+                type: string
+                nullable: true
+              allocatedHours:
+                type: number
+            required:
+              - projectId
+              - projectName
+              - allocatedHours
+      required:
+        - userId
+        - userName
+        - allocatedHours
+        - loggedHours
+        - targetHours
+        - utilizationPercent
+        - status
+        - projects
+
+    Invoice:
+      type: object
+      properties:
+        id:
+          type: string
+        invoiceNumber:
+          type: string
+        projectId:
+          type: string
+        projectName:
+          type: string
+        clientId:
+          type: string
+          nullable: true
+        clientName:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [draft, sent, paid, overdue]
+        issueDate:
+          type: string
+          format: date
+        dueDate:
+          type: string
+          format: date
+        subtotal:
+          type: number
+        taxRate:
+          type: number
+        taxAmount:
+          type: number
+        total:
+          type: number
+        notes:
+          type: string
+          nullable: true
+        lineItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvoiceLineItem"
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - invoiceNumber
+        - projectId
+        - projectName
+        - status
+        - issueDate
+        - dueDate
+        - subtotal
+        - taxRate
+        - taxAmount
+        - total
+        - lineItems
+        - createdAt
+
+    InvoiceLineItem:
+      type: object
+      properties:
+        id:
+          type: string
+        description:
+          type: string
+        quantity:
+          type: number
+        unitPrice:
+          type: number
+        amount:
+          type: number
+      required:
+        - id
+        - description
+        - quantity
+        - unitPrice
+        - amount
+
+    CreateInvoiceRequest:
+      type: object
+      properties:
+        projectId:
+          type: string
+        issueDate:
+          type: string
+          format: date
+        dueDate:
+          type: string
+          format: date
+        taxRate:
+          type: number
+        notes:
+          type: string
+          nullable: true
+        lineItems:
+          type: array
+          items:
+            type: object
+            properties:
+              description:
+                type: string
+              quantity:
+                type: number
+              unitPrice:
+                type: number
+            required:
+              - description
+              - quantity
+              - unitPrice
+      required:
+        - projectId
+        - issueDate
+        - dueDate
+        - taxRate
+        - lineItems
+
+    UpdateInvoiceRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [draft, sent, paid, overdue]
+        issueDate:
+          type: string
+          format: date
+        dueDate:
+          type: string
+          format: date
+        taxRate:
+          type: number
+        notes:
+          type: string
+          nullable: true
+        lineItems:
+          type: array
+          items:
+            type: object
+            properties:
+              description:
+                type: string
+              quantity:
+                type: number
+              unitPrice:
+                type: number
+            required:
+              - description
+              - quantity
+              - unitPrice
+
+    Expense:
+      type: object
+      properties:
+        id:
+          type: string
+        projectId:
+          type: string
+        projectName:
+          type: string
+        userId:
+          type: string
+        userName:
+          type: string
+        description:
+          type: string
+        amount:
+          type: number
+        category:
+          type: string
+          enum: [travel, supplies, software, meals, other]
+        date:
+          type: string
+          format: date
+        billable:
+          type: boolean
+        approved:
+          type: boolean
+        receiptUrl:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - projectId
+        - projectName
+        - userId
+        - userName
+        - description
+        - amount
+        - category
+        - date
+        - billable
+        - approved
+        - createdAt
+
+    CreateExpenseRequest:
+      type: object
+      properties:
+        projectId:
+          type: string
+        userId:
+          type: string
+        description:
+          type: string
+        amount:
+          type: number
+        category:
+          type: string
+          enum: [travel, supplies, software, meals, other]
+        date:
+          type: string
+          format: date
+        billable:
+          type: boolean
+        receiptUrl:
+          type: string
+          nullable: true
+      required:
+        - projectId
+        - userId
+        - description
+        - amount
+        - category
+        - date
+        - billable
+
+    UpdateExpenseRequest:
+      type: object
+      properties:
+        description:
+          type: string
+        amount:
+          type: number
+        category:
+          type: string
+          enum: [travel, supplies, software, meals, other]
+        date:
+          type: string
+          format: date
+        billable:
+          type: boolean
+        approved:
+          type: boolean
+        receiptUrl:
+          type: string
+          nullable: true

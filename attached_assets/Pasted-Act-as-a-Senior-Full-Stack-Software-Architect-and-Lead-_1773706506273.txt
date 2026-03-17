@@ -1,0 +1,53 @@
+Act as a Senior Full-Stack Software Architect and Lead Developer. I am building a bespoke studio management, time-tracking, and billing web application using Replit. The goal of this application is to completely replace our current fragmented system (Core BQE for billing/timecards + Google Calendar for scheduling) with an all-in-one platform.
+
+Core User Personas:
+
+Designers: Need a frictionless, visual calendar interface to manage their week.
+
+Project Managers (PMs): Need to allocate hours, monitor budgets, and view team utilization.
+
+Admin/Accounting: Need to generate invoices, RFPs, Design Plans, and manage project financials (matching the core capabilities of Core BQE).
+
+Key Features & Requirements:
+1. The Calendar & Scheduling Interface (Designer UX)
+
+A visual, drag-and-drop calendar interface (similar to Google Calendar).
+
+Designers log time in chunks, not via start/stop timers.
+
+The Workflow: A PM assigns a block of hours (e.g., "16 hrs | Black Desert Rapids Brand Standards"). The designer drags and drops those hours into focus chunks throughout their week to hit their 40-hour goal.
+
+Auto-Events: When a project phase is created, the system must automatically generate three events: a Kickoff, a Deadline, and an optional "Page Turn" review meeting.
+
+The calendar must show deliverables, allocated time vs. meeting times, and deadlines clearly.
+
+2. Resource Allocation & Utilization (PM UX)
+
+PMs can assign multi-day event blocks and budgets to specific designers.
+
+Visual Warnings: The dashboard must visually flag if a designer is over-utilized (scheduled >40 hours) or under-utilized, and flag if a project is burning through its budgeted hours too fast.
+
+3. Billing, Admin & Project Management
+
+Project management is lightweight on tasks but heavy on financials. No complex Kanban boards are needed.
+
+Must include robust document generation and tracking: RFPs, Design Plans, and Invoicing.
+
+Must replicate the core billing, expense tracking, and timecard approval workflows found in Core BQE.
+
+Tech Stack Requirements:
+
+Since I am building this in Replit, please recommend the most reliable, modern stack for this type of application (e.g., Next.js, React, Tailwind CSS, and Supabase or PostgreSQL for the database).
+
+How We Will Work Together:
+Because this is a massive application, we will build it iteratively. Do NOT try to write all the code at once.
+
+For your first response, I need you to provide:
+
+The Tech Stack: Confirm the exact stack we will use in Replit.
+
+The Database Schema: Outline the core database tables (e.g., Users, Projects, Phases, TimeBlocks, Invoices) and their relationships. This needs to be rock-solid to support both the calendar logic and the billing/Core BQE logic.
+
+The Development Roadmap: Break this project down into 5-6 distinct, sequential phases (e.g., Phase 1: Auth & DB Setup, Phase 2: Designer Calendar UI, etc.).
+
+Wait for my approval on the schema and roadmap before writing any application code.
