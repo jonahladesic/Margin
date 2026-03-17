@@ -1,24 +1,7 @@
 import { AppSidebar } from "@/components/app-sidebar";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { useAuth } from "@workspace/replit-auth-web";
-import { Redirect } from "wouter";
-import { Loader2 } from "lucide-react";
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  const { user, isLoading } = useAuth();
-
-  if (isLoading) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  if (!user) {
-    return <Redirect to="/login" />;
-  }
-
   return (
     <SidebarProvider>
       <div className="flex h-screen w-full bg-background overflow-hidden">

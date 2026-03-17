@@ -1,6 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { CalendarDays, FolderKanban, Users, FileText, Receipt, LogOut } from "lucide-react";
-import { useAuth } from "@workspace/replit-auth-web";
+import { CalendarDays, FolderKanban, Users, FileText, Receipt } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -13,17 +12,11 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 
 export function AppSidebar() {
   const [location] = useLocation();
-  const { user, logout } = useAuth();
-
-  if (!user) return null;
-
-  const isAdmin = user.role === "admin";
-  const isPM = user.role === "pm" || isAdmin;
 
   return (
     <Sidebar>
@@ -51,39 +44,30 @@ export function AppSidebar() {
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
-              
-              {isPM && (
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={location.startsWith("/resources")}>
-                    <Link href="/resources">
-                      <Users className="mr-2" />
-                      <span>Resources</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              )}
-
-              {isAdmin && (
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={location.startsWith("/invoices")}>
-                    <Link href="/invoices">
-                      <FileText className="mr-2" />
-                      <span>Invoices</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              )}
-
-              {isPM && (
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={location.startsWith("/expenses")}>
-                    <Link href="/expenses">
-                      <Receipt className="mr-2" />
-                      <span>Expenses</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              )}
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={location.startsWith("/resources")}>
+                  <Link href="/resources">
+                    <Users className="mr-2" />
+                    <span>Resources</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={location.startsWith("/invoices")}>
+                  <Link href="/invoices">
+                    <FileText className="mr-2" />
+                    <span>Invoices</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={location.startsWith("/expenses")}>
+                  <Link href="/expenses">
+                    <Receipt className="mr-2" />
+                    <span>Expenses</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -91,16 +75,12 @@ export function AppSidebar() {
       <SidebarFooter className="p-4">
         <div className="flex items-center gap-3">
           <Avatar className="h-9 w-9">
-            <AvatarImage src={user.profileImage || undefined} />
-            <AvatarFallback>{user.username?.charAt(0).toUpperCase() || 'U'}</AvatarFallback>
+            <AvatarFallback>A</AvatarFallback>
           </Avatar>
           <div className="flex flex-col flex-1 overflow-hidden">
-            <span className="text-sm font-medium truncate">{user.username}</span>
-            <span className="text-xs text-sidebar-foreground/60 uppercase">{user.role}</span>
+            <span className="text-sm font-medium truncate">Admin</span>
+            <Badge variant="secondary" className="w-fit text-xs mt-0.5">admin</Badge>
           </div>
-          <Button variant="ghost" size="icon" onClick={logout} className="shrink-0 text-sidebar-foreground/60 hover:text-sidebar-foreground">
-            <LogOut className="h-4 w-4" />
-          </Button>
         </div>
       </SidebarFooter>
     </Sidebar>
