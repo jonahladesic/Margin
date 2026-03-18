@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, numeric, date, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, numeric, date, pgEnum, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { projectsTable } from "./projects";
@@ -17,6 +17,8 @@ export const phasesTable = pgTable("phases", {
   startDate: date("start_date"),
   endDate: date("end_date"),
   status: phaseStatusEnum("status").notNull().default("upcoming"),
+  enabled: boolean("enabled").notNull().default(true),
+  sortOrder: numeric("sort_order", { precision: 5, scale: 0 }).notNull().default("0"),
   kickoffDate: date("kickoff_date"),
   deadlineDate: date("deadline_date"),
   pageTurnDate: date("page_turn_date"),

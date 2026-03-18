@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 const router: IRouter = Router();
 
 router.put("/phases/:id", async (req, res) => {
-  const { name, budgetedHours, startDate, endDate, status, kickoffDate, deadlineDate, pageTurnDate } = req.body;
+  const { name, budgetedHours, startDate, endDate, status, kickoffDate, deadlineDate, pageTurnDate, enabled, sortOrder } = req.body;
   const updated = await db
     .update(phasesTable)
     .set({
@@ -18,6 +18,8 @@ router.put("/phases/:id", async (req, res) => {
       kickoffDate,
       deadlineDate,
       pageTurnDate,
+      enabled: enabled !== undefined ? enabled : undefined,
+      sortOrder: sortOrder !== undefined ? String(sortOrder) : undefined,
       updatedAt: new Date(),
     })
     .where(eq(phasesTable.id, req.params.id))
@@ -34,6 +36,8 @@ router.put("/phases/:id", async (req, res) => {
     name: ph.name,
     budgetedHours: parseFloat(ph.budgetedHours ?? "0"),
     loggedHours: 0,
+    enabled: ph.enabled,
+    sortOrder: parseFloat(ph.sortOrder ?? "0"),
     startDate: ph.startDate,
     endDate: ph.endDate,
     status: ph.status,

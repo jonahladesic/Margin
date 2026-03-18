@@ -78,19 +78,22 @@ router.get("/projects/:id", async (req, res) => {
   res.json(formatProject(p, clientName, parseFloat(logged[0]?.total ?? "0"), 0));
 });
 
-const FIXED_PHASES = ["Discovery", "Vision", "Brand Identity", "Brand Standards"];
-
 router.post("/projects", async (req, res) => {
   const {
     name, clientId, status, type, budgetedHours, budgetAmount,
     startDate, endDate, description, color,
-    ntpReceived, ntpDate, paymentStatus,
+    ntpReceived, ntpDate, paymentStatus, phases,
   } = req.body;
   if (!name) {
     res.status(400).json({ error: "Name is required" });
     return;
   }
   const projectId = randomUUID();
+
+  const totalBudgeted = Array.isArray(phases)
+    ? phases.reduce((sum: number, p: any) => sum + (Number(p.budgetedHours) || 0), 0)
+    : Number(budgetedHours ?? 0);
+
   const newProject = await db
     .insert(projectsTable)
     .values({
@@ -99,7 +102,7 @@ router.post("/projects", async (req, res) => {
       clientId: clientId || null,
       status: status || "active",
       type: type || "other",
-      budgetedHours: String(budgetedHours ?? 0),
+      budgetedHours: String(totalBudgeted),
       budgetAmount: budgetAmount ? String(budgetAmount) : null,
       startDate: startDate || null,
       endDate: endDate || null,
@@ -111,15 +114,19 @@ router.post("/projects", async (req, res) => {
     })
     .returning();
 
-  await db.insert(phasesTable).values(
-    FIXED_PHASES.map((phaseName) => ({
-      id: randomUUID(),
-      projectId,
-      name: phaseName,
-      budgetedHours: "0",
-      status: "upcoming" as const,
-    }))
-  );
+  if (Array.isArray(phases) && phases.length > 0) {
+    await db.insert(phasesTable).values(
+      phases.map((ph: any, idx: number) => ({
+        id: randomUUID(),
+        projectId,
+        name: ph.name,
+        budgetedHours: String(ph.budgetedHours ?? 0),
+        status: "upcoming" as const,
+        enabled: ph.enabled !== false,
+        sortOrder: String(idx),
+      }))
+    );
+  }
 
   const p = newProject[0];
   res.status(201).json(formatProject(p, null, 0, 0));
@@ -180,18 +187,32 @@ router.get("/projects/:id/phases", async (req, res) => {
         .select({ total: sql<string>`coalesce(sum(${timeBlocksTable.hours}), 0)` })
         .from(timeBlocksTable)
         .where(eq(timeBlocksTable.phaseId, ph.id));
+      const subPhaseTotals = await db
+        .select({
+          subPhase: timeBlocksTable.subPhase,
+          total: sql<string>`coalesce(sum(${timeBlocksTable.hours}), 0)`,
+        })
+        .from(timeBlocksTable)
+        .where(eq(timeBlocksTable.phaseId, ph.id))
+        .groupBy(timeBlocksTable.subPhase);
+
       return {
         id: ph.id,
         projectId: ph.projectId,
         name: ph.name,
         budgetedHours: parseFloat(ph.budgetedHours ?? "0"),
         loggedHours: parseFloat(logged[0]?.total ?? "0"),
+        enabled: ph.enabled,
+        sortOrder: parseFloat(ph.sortOrder ?? "0"),
         startDate: ph.startDate,
         endDate: ph.endDate,
         status: ph.status,
         kickoffDate: ph.kickoffDate,
         deadlineDate: ph.deadlineDate,
         pageTurnDate: ph.pageTurnDate,
+        subPhaseTotals: Object.fromEntries(
+          subPhaseTotals.map((s) => [s.subPhase ?? "unassigned", parseFloat(s.total)])
+        ),
         createdAt: ph.createdAt.toISOString(),
       };
     })
@@ -201,7 +222,7 @@ router.get("/projects/:id/phases", async (req, res) => {
 });
 
 router.post("/projects/:id/phases", async (req, res) => {
-  const { name, budgetedHours, startDate, endDate, kickoffDate, deadlineDate, pageTurnDate } = req.body;
+  const { name, budgetedHours, startDate, endDate, kickoffDate, deadlineDate, pageTurnDate, enabled, sortOrder } = req.body;
   if (!name) {
     res.status(400).json({ error: "Name is required" });
     return;
@@ -218,6 +239,8 @@ router.post("/projects/:id/phases", async (req, res) => {
       kickoffDate: kickoffDate || null,
       deadlineDate: deadlineDate || null,
       pageTurnDate: pageTurnDate || null,
+      enabled: enabled !== false,
+      sortOrder: sortOrder !== undefined ? String(sortOrder) : "0",
     })
     .returning();
 

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { Plus, FileCheck, DollarSign, Clock } from "lucide-react";
+import { Plus, FileCheck, DollarSign, Clock, X, GripVertical } from "lucide-react";
 import { useListProjects, useCreateProject, useListClients } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -18,41 +18,48 @@ import { useQueryClient } from "@tanstack/react-query";
 
 const PROJECT_COLORS = ["#4f46e5","#0ea5e9","#10b981","#f59e0b","#ef4444","#8b5cf6","#ec4899","#14b8a6"];
 
-function NTPBadge({ received, date }: { received: boolean; date?: string | null }) {
-  if (received) {
-    return (
-      <Badge variant="outline" className="gap-1 bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-[10px] px-1.5 py-0.5">
-        <FileCheck className="h-3 w-3" />
-        NTP
-      </Badge>
-    );
-  }
-  return (
-    <Badge variant="outline" className="gap-1 bg-amber-500/10 text-amber-500 border-amber-500/20 text-[10px] px-1.5 py-0.5">
-      <Clock className="h-3 w-3" />
-      Awaiting NTP
+const PHASE_SUGGESTIONS = [
+  "Discovery", "Vision", "Brand Identity", "Brand Standards",
+  "City Submittal", "Schematic Design", "Design Development",
+  "Construction Documents", "Permitting", "Bidding", "Construction Administration",
+];
+
+const SUB_PHASES = ["Project", "Design", "Meetings", "Internal Meetings"];
+
+interface PhaseRow {
+  name: string;
+  budgetedHours: string;
+}
+
+function NTPBadge({ received }: { received: boolean }) {
+  return received ? (
+    <Badge variant="outline" className="gap-1 bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-[10px] px-1.5">
+      <FileCheck className="h-3 w-3" /> NTP
+    </Badge>
+  ) : (
+    <Badge variant="outline" className="gap-1 bg-amber-500/10 text-amber-500 border-amber-500/20 text-[10px] px-1.5">
+      <Clock className="h-3 w-3" /> Awaiting NTP
     </Badge>
   );
 }
 
 function PaymentBadge({ status }: { status: string }) {
-  const map: Record<string, { label: string; cls: string }> = {
+  const m: Record<string, { label: string; cls: string }> = {
     paid:    { label: "Paid",    cls: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" },
     partial: { label: "Partial", cls: "bg-blue-500/10 text-blue-500 border-blue-500/20" },
     unpaid:  { label: "Unpaid",  cls: "bg-red-500/10 text-red-500 border-red-500/20" },
   };
-  const s = map[status] || map.unpaid;
+  const s = m[status] || m.unpaid;
   return (
-    <Badge variant="outline" className={`gap-1 text-[10px] px-1.5 py-0.5 ${s.cls}`}>
-      <DollarSign className="h-3 w-3" />
-      {s.label}
+    <Badge variant="outline" className={`gap-1 text-[10px] px-1.5 ${s.cls}`}>
+      <DollarSign className="h-3 w-3" /> {s.label}
     </Badge>
   );
 }
 
 const DEFAULT_FORM = {
   name: "", clientId: "", status: "active", type: "branding",
-  budgetedHours: "100", budgetAmount: "10000", color: "#4f46e5",
+  budgetAmount: "10000", color: "#4f46e5",
   ntpReceived: false, ntpDate: "", paymentStatus: "unpaid",
 };
 
@@ -64,9 +71,25 @@ export default function Projects() {
   const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [formData, setFormData] = useState({ ...DEFAULT_FORM });
+  const [phases, setPhases] = useState<PhaseRow[]>([]);
+  const [customPhase, setCustomPhase] = useState("");
   const [filter, setFilter] = useState<string>("all");
 
   const set = (key: string, value: any) => setFormData((f) => ({ ...f, [key]: value }));
+
+  const addPhase = (name: string) => {
+    if (!name.trim()) return;
+    if (phases.find((p) => p.name.toLowerCase() === name.trim().toLowerCase())) return;
+    setPhases((p) => [...p, { name: name.trim(), budgetedHours: "0" }]);
+    setCustomPhase("");
+  };
+
+  const removePhase = (idx: number) => setPhases((p) => p.filter((_, i) => i !== idx));
+
+  const updatePhaseHours = (idx: number, hours: string) =>
+    setPhases((p) => p.map((ph, i) => (i === idx ? { ...ph, budgetedHours: hours } : ph)));
+
+  const totalPhaseHours = phases.reduce((sum, p) => sum + (parseFloat(p.budgetedHours) || 0), 0);
 
   const handleCreate = () => {
     if (!formData.name) return;
@@ -77,19 +100,20 @@ export default function Projects() {
           clientId: formData.clientId || undefined,
           status: formData.status as any,
           type: formData.type as any,
-          budgetedHours: Number(formData.budgetedHours),
           budgetAmount: Number(formData.budgetAmount),
           color: formData.color,
           ntpReceived: formData.ntpReceived,
           ntpDate: formData.ntpDate || undefined,
           paymentStatus: formData.paymentStatus as any,
+          phases: phases.map((p) => ({ name: p.name, budgetedHours: parseFloat(p.budgetedHours) || 0 })),
         } as any,
       },
       {
         onSuccess: () => {
-          toast({ title: "Project created — 4 phases auto-added" });
+          toast({ title: `Project created with ${phases.length} phase${phases.length !== 1 ? "s" : ""}` });
           setIsDialogOpen(false);
           setFormData({ ...DEFAULT_FORM });
+          setPhases([]);
           queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
         },
         onError: () => toast({ title: "Failed to create project", variant: "destructive" }),
@@ -108,6 +132,7 @@ export default function Projects() {
   };
 
   const filtered = filter === "all" ? (projects as any[]) : (projects as any[]).filter((p) => p.status === filter);
+  const usedSuggestions = new Set(phases.map((p) => p.name.toLowerCase()));
 
   return (
     <div className="p-8 max-w-7xl mx-auto flex flex-col gap-8">
@@ -117,69 +142,136 @@ export default function Projects() {
           <p className="text-muted-foreground mt-1">Manage all active and past studio projects.</p>
         </div>
 
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <Dialog open={isDialogOpen} onOpenChange={(open) => { setIsDialogOpen(open); if (!open) { setPhases([]); setFormData({ ...DEFAULT_FORM }); } }}>
           <DialogTrigger asChild>
             <Button><Plus className="mr-2 h-4 w-4" />New Project</Button>
           </DialogTrigger>
-          <DialogContent className="max-w-lg">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Create New Project</DialogTitle>
             </DialogHeader>
-            <div className="grid gap-4 py-2">
-              <div className="grid gap-2">
-                <Label>Project Name *</Label>
-                <Input value={formData.name} onChange={(e) => set("name", e.target.value)} placeholder="e.g. Acme Brand Identity" />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-5 py-2">
+
+              {/* Basic Info */}
+              <div className="grid gap-3">
                 <div className="grid gap-2">
-                  <Label>Client</Label>
-                  <Select value={formData.clientId || "none"} onValueChange={(v) => set("clientId", v === "none" ? "" : v)}>
-                    <SelectTrigger><SelectValue placeholder="No client" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">No client</SelectItem>
-                      {(clients as any[]).map((c: any) => (
-                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  <Label>Project Name *</Label>
+                  <Input value={formData.name} onChange={(e) => set("name", e.target.value)} placeholder="e.g. Acme Brand Identity" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="grid gap-2">
+                    <Label>Client</Label>
+                    <Select value={formData.clientId || "none"} onValueChange={(v) => set("clientId", v === "none" ? "" : v)}>
+                      <SelectTrigger><SelectValue placeholder="No client" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No client</SelectItem>
+                        {(clients as any[]).map((c: any) => (
+                          <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Type</Label>
+                    <Select value={formData.type} onValueChange={(v) => set("type", v)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {["branding","web","interior","architecture","other"].map((t) => (
+                          <SelectItem key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="grid gap-2">
+                    <Label>Budget ($)</Label>
+                    <Input type="number" value={formData.budgetAmount} onChange={(e) => set("budgetAmount", e.target.value)} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Color</Label>
+                    <div className="flex gap-2 flex-wrap mt-1">
+                      {PROJECT_COLORS.map((c) => (
+                        <button key={c}
+                          className={`w-6 h-6 rounded-full border-2 transition-all ${formData.color === c ? "border-white scale-110" : "border-transparent"}`}
+                          style={{ backgroundColor: c }} onClick={() => set("color", c)} />
                       ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid gap-2">
-                  <Label>Type</Label>
-                  <Select value={formData.type} onValueChange={(v) => set("type", v)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {["branding","web","interior","architecture","other"].map((t) => (
-                        <SelectItem key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="grid gap-2">
-                  <Label>Budgeted Hours</Label>
-                  <Input type="number" value={formData.budgetedHours} onChange={(e) => set("budgetedHours", e.target.value)} />
+
+              {/* Phases */}
+              <div className="border-t pt-4 grid gap-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-base">Phases & Scope</Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Define which phases are in scope. Each phase has its own hour budget.
+                      {totalPhaseHours > 0 && <span className="text-foreground font-medium"> Total: {totalPhaseHours}h</span>}
+                    </p>
+                  </div>
                 </div>
-                <div className="grid gap-2">
-                  <Label>Budget ($)</Label>
-                  <Input type="number" value={formData.budgetAmount} onChange={(e) => set("budgetAmount", e.target.value)} />
-                </div>
-              </div>
-              <div className="grid gap-2">
-                <Label>Color</Label>
-                <div className="flex gap-2 flex-wrap">
-                  {PROJECT_COLORS.map((c) => (
-                    <button
-                      key={c}
-                      className={`w-7 h-7 rounded-full border-2 transition-all ${formData.color === c ? "border-white scale-110" : "border-transparent"}`}
-                      style={{ backgroundColor: c }}
-                      onClick={() => set("color", c)}
-                    />
+
+                {/* Suggestions */}
+                <div className="flex flex-wrap gap-1.5">
+                  {PHASE_SUGGESTIONS.filter((s) => !usedSuggestions.has(s.toLowerCase())).map((s) => (
+                    <button key={s}
+                      onClick={() => addPhase(s)}
+                      className="text-xs px-2.5 py-1 rounded-full border border-border text-muted-foreground hover:text-foreground hover:border-primary/50 hover:bg-primary/5 transition-colors">
+                      + {s}
+                    </button>
                   ))}
                 </div>
+
+                {/* Added phases list */}
+                {phases.length > 0 && (
+                  <div className="flex flex-col gap-2">
+                    {phases.map((ph, idx) => (
+                      <div key={idx} className="flex items-center gap-2 bg-muted/30 rounded-lg px-3 py-2">
+                        <GripVertical className="h-4 w-4 text-muted-foreground/40 shrink-0" />
+                        <span className="flex-1 text-sm font-medium">{ph.name}</span>
+                        <div className="flex items-center gap-1">
+                          <Input
+                            type="number"
+                            min="0"
+                            value={ph.budgetedHours}
+                            onChange={(e) => updatePhaseHours(idx, e.target.value)}
+                            className="w-20 h-7 text-sm text-right"
+                          />
+                          <span className="text-xs text-muted-foreground">hrs</span>
+                        </div>
+                        <button onClick={() => removePhase(idx)} className="text-muted-foreground hover:text-destructive ml-1">
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Custom phase input */}
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Custom phase name…"
+                    value={customPhase}
+                    onChange={(e) => setCustomPhase(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") addPhase(customPhase); }}
+                    className="flex-1"
+                  />
+                  <Button variant="outline" size="sm" onClick={() => addPhase(customPhase)} disabled={!customPhase.trim()}>
+                    Add
+                  </Button>
+                </div>
+                {phases.length === 0 && (
+                  <p className="text-xs text-muted-foreground italic">
+                    No phases added yet — click a suggestion above or type a custom phase name.
+                  </p>
+                )}
               </div>
-              <div className="border-t pt-4 grid gap-4">
-                <p className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Billing Status</p>
+
+              {/* Billing */}
+              <div className="border-t pt-4 grid gap-3">
+                <Label className="text-base">Billing Status</Label>
                 <div className="flex items-center justify-between">
                   <div>
                     <Label>NTP Received</Label>
@@ -206,26 +298,24 @@ export default function Projects() {
                 </div>
               </div>
             </div>
+
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
               <Button onClick={handleCreate} disabled={createProject.isPending || !formData.name}>
-                {createProject.isPending ? "Creating…" : "Create Project"}
+                {createProject.isPending ? "Creating…" : `Create Project${phases.length > 0 ? ` with ${phases.length} phase${phases.length !== 1 ? "s" : ""}` : ""}`}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
 
-      <div className="flex gap-2">
+      {/* Status filters */}
+      <div className="flex gap-2 flex-wrap">
         {["all","active","on_hold","completed","cancelled"].map((s) => (
-          <button
-            key={s}
-            onClick={() => setFilter(s)}
-            className={`text-sm px-3 py-1.5 rounded-md transition-colors ${filter === s ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
-          >
+          <button key={s} onClick={() => setFilter(s)}
+            className={`text-sm px-3 py-1.5 rounded-md transition-colors ${filter === s ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}>
             {s === "all" ? "All" : s === "on_hold" ? "On Hold" : s.charAt(0).toUpperCase() + s.slice(1)}
-            {" "}
-            <span className="text-xs opacity-70">
+            {" "}<span className="text-xs opacity-70">
               ({s === "all" ? (projects as any[]).length : (projects as any[]).filter((p: any) => p.status === s).length})
             </span>
           </button>
@@ -260,21 +350,25 @@ export default function Projects() {
                     </div>
 
                     <div className="flex flex-wrap gap-1.5">
-                      <NTPBadge received={project.ntpReceived} date={project.ntpDate} />
+                      <NTPBadge received={project.ntpReceived} />
                       <PaymentBadge status={project.paymentStatus} />
                     </div>
 
                     <div className="flex-1" />
 
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-xs">
-                        <span className="text-muted-foreground">Hours</span>
-                        <span className={`font-medium ${over ? "text-destructive" : ""}`}>
-                          {project.loggedHours} / {project.budgetedHours}
-                        </span>
+                    {project.budgetedHours > 0 ? (
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-xs">
+                          <span className="text-muted-foreground">Hours</span>
+                          <span className={`font-medium ${over ? "text-destructive" : ""}`}>
+                            {project.loggedHours} / {project.budgetedHours}h
+                          </span>
+                        </div>
+                        <Progress value={Math.min(pct, 100)} className="h-1.5" />
                       </div>
-                      <Progress value={Math.min(pct, 100)} className="h-1.5" />
-                    </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground italic">No phases defined</p>
+                    )}
 
                     <div className="flex justify-between items-center text-xs text-muted-foreground border-t border-border pt-2">
                       <span className="uppercase">{project.type}</span>
