@@ -32,6 +32,7 @@ async function formatTimeBlock(tb: typeof timeBlocksTable.$inferSelect) {
     projectColor: project[0]?.color ?? null,
     phaseId: tb.phaseId,
     phaseName: phase[0]?.name ?? null,
+    subPhase: tb.subPhase,
     allocationId: tb.allocationId,
     date: tb.date,
     hours: parseFloat(tb.hours),
@@ -62,9 +63,9 @@ router.get("/timeblocks", async (req, res) => {
 });
 
 router.post("/timeblocks", async (req, res) => {
-  const { userId, projectId, phaseId, allocationId, date, hours, type, title, description } =
+  const { userId, projectId, phaseId, allocationId, date, hours, type, title, subPhase, description } =
     req.body;
-  if (!userId || !projectId || !date || hours === undefined) {
+  if (!projectId || !date || hours === undefined) {
     res.status(400).json({ error: "Missing required fields" });
     return;
   }
@@ -72,7 +73,7 @@ router.post("/timeblocks", async (req, res) => {
     .insert(timeBlocksTable)
     .values({
       id: randomUUID(),
-      userId,
+      userId: userId || "anonymous",
       projectId,
       phaseId: phaseId || null,
       allocationId: allocationId || null,
@@ -80,6 +81,7 @@ router.post("/timeblocks", async (req, res) => {
       hours: String(hours),
       type: type || "work",
       title: title || null,
+      subPhase: subPhase || null,
       description: description || null,
       approved: false,
     })
@@ -89,7 +91,7 @@ router.post("/timeblocks", async (req, res) => {
 });
 
 router.put("/timeblocks/:id", async (req, res) => {
-  const { date, hours, type, title, description, approved } = req.body;
+  const { date, hours, type, title, subPhase, description, approved, phaseId } = req.body;
   const updated = await db
     .update(timeBlocksTable)
     .set({
@@ -97,6 +99,8 @@ router.put("/timeblocks/:id", async (req, res) => {
       hours: hours !== undefined ? String(hours) : undefined,
       type,
       title,
+      subPhase: subPhase ?? undefined,
+      phaseId: phaseId ?? undefined,
       description,
       approved,
       updatedAt: new Date(),

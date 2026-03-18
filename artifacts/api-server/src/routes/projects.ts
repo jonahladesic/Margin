@@ -27,6 +27,9 @@ function formatProject(p: typeof projectsTable.$inferSelect, clientName: string 
     endDate: p.endDate,
     description: p.description,
     color: p.color,
+    ntpReceived: p.ntpReceived,
+    ntpDate: p.ntpDate,
+    paymentStatus: p.paymentStatus,
     createdAt: p.createdAt.toISOString(),
   };
 }
@@ -75,16 +78,23 @@ router.get("/projects/:id", async (req, res) => {
   res.json(formatProject(p, clientName, parseFloat(logged[0]?.total ?? "0"), 0));
 });
 
+const FIXED_PHASES = ["Discovery", "Vision", "Brand Identity", "Brand Standards"];
+
 router.post("/projects", async (req, res) => {
-  const { name, clientId, status, type, budgetedHours, budgetAmount, startDate, endDate, description, color } = req.body;
+  const {
+    name, clientId, status, type, budgetedHours, budgetAmount,
+    startDate, endDate, description, color,
+    ntpReceived, ntpDate, paymentStatus,
+  } = req.body;
   if (!name) {
     res.status(400).json({ error: "Name is required" });
     return;
   }
+  const projectId = randomUUID();
   const newProject = await db
     .insert(projectsTable)
     .values({
-      id: randomUUID(),
+      id: projectId,
       name,
       clientId: clientId || null,
       status: status || "active",
@@ -95,15 +105,32 @@ router.post("/projects", async (req, res) => {
       endDate: endDate || null,
       description: description || null,
       color: color || null,
+      ntpReceived: ntpReceived ?? false,
+      ntpDate: ntpDate || null,
+      paymentStatus: paymentStatus || "unpaid",
     })
     .returning();
+
+  await db.insert(phasesTable).values(
+    FIXED_PHASES.map((phaseName) => ({
+      id: randomUUID(),
+      projectId,
+      name: phaseName,
+      budgetedHours: "0",
+      status: "upcoming" as const,
+    }))
+  );
 
   const p = newProject[0];
   res.status(201).json(formatProject(p, null, 0, 0));
 });
 
 router.put("/projects/:id", async (req, res) => {
-  const { name, clientId, status, type, budgetedHours, budgetAmount, startDate, endDate, description, color } = req.body;
+  const {
+    name, clientId, status, type, budgetedHours, budgetAmount,
+    startDate, endDate, description, color,
+    ntpReceived, ntpDate, paymentStatus,
+  } = req.body;
   const updated = await db
     .update(projectsTable)
     .set({
@@ -117,6 +144,9 @@ router.put("/projects/:id", async (req, res) => {
       endDate,
       description,
       color,
+      ntpReceived: ntpReceived ?? undefined,
+      ntpDate: ntpDate ?? undefined,
+      paymentStatus: paymentStatus ?? undefined,
       updatedAt: new Date(),
     })
     .where(eq(projectsTable.id, req.params.id))

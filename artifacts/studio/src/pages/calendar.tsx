@@ -1,292 +1,410 @@
-import { useState } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, addDays, isSameDay } from "date-fns";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
-import { useAuth } from "@workspace/replit-auth-web";
-import { 
-  useListAllocations, 
-  useListTimeBlocks,
-  useCreateTimeBlock
-} from "@workspace/api-client-react";
+import { ChevronLeft, ChevronRight, X, Trash2 } from "lucide-react";
+import { useListTimeBlocks, useCreateTimeBlock, useDeleteTimeBlock } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter,
-} from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
+
+const PHASES = ["Discovery", "Vision", "Brand Identity", "Brand Standards"];
+const SUB_PHASES = ["Project", "Design", "Meetings", "Internal Meetings"];
+const HOUR_START = 8;
+const HOUR_END = 20;
+const CELL_HEIGHT = 64;
+
+const PROJECT_COLORS = [
+  "#4f46e5","#0ea5e9","#10b981","#f59e0b","#ef4444","#8b5cf6","#ec4899","#14b8a6"
+];
+
+interface DragState {
+  day: Date;
+  startHour: number;
+  endHour: number;
+}
+
+interface ModalState {
+  open: boolean;
+  day: Date | null;
+  startHour: number;
+  hours: number;
+}
 
 export default function Calendar() {
-  const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [isLogTimeOpen, setIsLogTimeOpen] = useState(false);
+  const [drag, setDrag] = useState<DragState | null>(null);
+  const [modal, setModal] = useState<ModalState>({ open: false, day: null, startHour: 9, hours: 1 });
+  const [form, setForm] = useState({ projectId: "", phaseId: "", subPhase: "", description: "" });
+  const isDragging = useRef(false);
+  const gridRef = useRef<HTMLDivElement>(null);
 
-  const [formData, setFormData] = useState({
-    projectId: "",
-    date: format(new Date(), "yyyy-MM-dd"),
-    hours: "1",
-    type: "work",
-    description: ""
-  });
-
-  const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 }); // Monday
+  const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
   const weekEnd = endOfWeek(currentDate, { weekStartsOn: 1 });
+  const days = Array.from({ length: 7 }).map((_, i) => addDays(weekStart, i));
+  const hours = Array.from({ length: HOUR_END - HOUR_START }).map((_, i) => HOUR_START + i);
 
-  const { data: allocations = [] } = useListAllocations({
-    query: {
-      queryKey: ["allocations", user?.id],
+  const { data: projects = [] } = useQuery({
+    queryKey: ["/api/projects"],
+    queryFn: async () => {
+      const r = await fetch("/api/projects");
+      return r.json();
     },
-    request: {
-      query: {
-        userId: user?.id,
-      }
-    }
   });
 
   const { data: timeblocks = [] } = useListTimeBlocks({
-    query: {
-      queryKey: ["timeblocks", user?.id, weekStart.toISOString()],
-    },
     request: {
       query: {
-        userId: user?.id,
-        startDate: weekStart.toISOString(),
-        endDate: weekEnd.toISOString(),
-      }
-    }
+        startDate: format(weekStart, "yyyy-MM-dd"),
+        endDate: format(weekEnd, "yyyy-MM-dd"),
+      },
+    },
   });
 
+  const [phases, setPhases] = useState<Record<string, { id: string; name: string }[]>>({});
+
+  useEffect(() => {
+    if (!form.projectId) return;
+    fetch(`/api/projects/${form.projectId}/phases`)
+      .then((r) => r.json())
+      .then((data) => setPhases((prev) => ({ ...prev, [form.projectId]: data })));
+  }, [form.projectId]);
+
   const createTimeBlock = useCreateTimeBlock();
+  const deleteTimeBlock = useDeleteTimeBlock();
 
   const nextWeek = () => setCurrentDate(addWeeks(currentDate, 1));
   const prevWeek = () => setCurrentDate(subWeeks(currentDate, 1));
-  const today = () => setCurrentDate(new Date());
+  const goToday = () => setCurrentDate(new Date());
 
-  const handleLogTime = () => {
-    if (!user || !formData.projectId) return;
+  const totalLoggedThisWeek = (timeblocks as any[]).reduce((acc: number, tb: any) => acc + (tb.hours || 0), 0);
 
-    createTimeBlock.mutate({
-      data: {
-        userId: user.id,
-        projectId: formData.projectId,
-        date: new Date(formData.date).toISOString(),
-        hours: Number(formData.hours),
-        type: formData.type as any,
-        description: formData.description
+  const getHourFromY = useCallback((y: number, colEl: Element) => {
+    const rect = colEl.getBoundingClientRect();
+    const relY = y - rect.top;
+    const hour = Math.floor(relY / CELL_HEIGHT) + HOUR_START;
+    return Math.max(HOUR_START, Math.min(HOUR_END - 1, hour));
+  }, []);
+
+  const handleMouseDown = (e: React.MouseEvent, day: Date) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const col = e.currentTarget as Element;
+    const hour = getHourFromY(e.clientY, col);
+    isDragging.current = true;
+    setDrag({ day, startHour: hour, endHour: hour });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent, day: Date) => {
+    if (!isDragging.current || !drag || !isSameDay(drag.day, day)) return;
+    const col = e.currentTarget as Element;
+    const hour = getHourFromY(e.clientY, col);
+    setDrag((d) => d ? { ...d, endHour: hour } : null);
+  };
+
+  const handleMouseUp = (e: React.MouseEvent, day: Date) => {
+    if (!isDragging.current || !drag || !isSameDay(drag.day, day)) return;
+    isDragging.current = false;
+    const startHour = Math.min(drag.startHour, drag.endHour);
+    const endHour = Math.max(drag.startHour, drag.endHour) + 1;
+    const hours = Math.max(0.5, endHour - startHour);
+    setDrag(null);
+    setModal({ open: true, day, startHour, hours });
+    setForm({ projectId: "", phaseId: "", subPhase: "", description: "" });
+  };
+
+  useEffect(() => {
+    const handleGlobalMouseUp = () => {
+      if (isDragging.current) {
+        isDragging.current = false;
+        setDrag(null);
       }
-    }, {
-      onSuccess: () => {
-        toast({ title: "Time logged successfully" });
-        setIsLogTimeOpen(false);
-        queryClient.invalidateQueries({ queryKey: ["timeblocks"] });
+    };
+    window.addEventListener("mouseup", handleGlobalMouseUp);
+    return () => window.removeEventListener("mouseup", handleGlobalMouseUp);
+  }, []);
+
+  const handleSave = () => {
+    if (!form.projectId || !modal.day) {
+      toast({ title: "Please select a project", variant: "destructive" });
+      return;
+    }
+    const selectedPhase = phases[form.projectId]?.find((p) => p.id === form.phaseId);
+    createTimeBlock.mutate(
+      {
+        data: {
+          projectId: form.projectId,
+          phaseId: form.phaseId || undefined,
+          date: format(modal.day, "yyyy-MM-dd"),
+          hours: modal.hours,
+          subPhase: form.subPhase || undefined,
+          description: form.description || undefined,
+          type: "work",
+        } as any,
       },
-      onError: () => {
-        toast({ title: "Failed to log time", variant: "destructive" });
+      {
+        onSuccess: () => {
+          toast({ title: "Time block saved" });
+          setModal({ open: false, day: null, startHour: 9, hours: 1 });
+          queryClient.invalidateQueries({ queryKey: ["/api/timeblocks"] });
+        },
+        onError: () => toast({ title: "Failed to save", variant: "destructive" }),
       }
+    );
+  };
+
+  const handleDelete = (id: string) => {
+    deleteTimeBlock.mutate({ id }, {
+      onSuccess: () => {
+        toast({ title: "Time block deleted" });
+        queryClient.invalidateQueries({ queryKey: ["/api/timeblocks"] });
+      },
     });
   };
 
-  const totalLoggedThisWeek = timeblocks.reduce((acc, tb) => acc + tb.hours, 0);
-
-  const days = Array.from({ length: 7 }).map((_, i) => addDays(weekStart, i));
-  const hours = Array.from({ length: 13 }).map((_, i) => i + 8); // 8am to 8pm
-
-  // Deduplicate projects for dropdown
-  const uniqueProjects = Array.from(new Map(allocations.map(a => [a.projectId, a])).values());
+  const getProjectColor = (projectId: string) => {
+    const proj = (projects as any[]).find((p) => p.id === projectId);
+    return proj?.color || "#4f46e5";
+  };
 
   return (
-    <div className="h-full flex flex-col p-6 gap-6">
-      <div className="flex items-center justify-between">
+    <div className="h-full flex flex-col overflow-hidden">
+      <div className="flex items-center justify-between px-6 pt-6 pb-4 shrink-0">
         <div className="flex items-center gap-4">
           <h1 className="text-3xl font-bold tracking-tight">Calendar</h1>
-          <div className="flex items-center gap-2 bg-card rounded-md border p-1 shadow-sm">
-            <Button variant="ghost" size="icon" onClick={prevWeek} className="h-8 w-8">
+          <div className="flex items-center gap-1 bg-card rounded-lg border p-1">
+            <Button variant="ghost" size="icon" onClick={prevWeek} className="h-7 w-7">
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <span className="text-sm font-medium w-48 text-center">
-              {format(weekStart, "MMM d")} - {format(weekEnd, "MMM d, yyyy")}
+            <span className="text-sm font-medium px-3 min-w-[160px] text-center">
+              {format(weekStart, "MMM d")} – {format(weekEnd, "MMM d, yyyy")}
             </span>
-            <Button variant="ghost" size="icon" onClick={nextWeek} className="h-8 w-8">
+            <Button variant="ghost" size="icon" onClick={nextWeek} className="h-7 w-7">
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
-          <Button variant="outline" size="sm" onClick={today}>This Week</Button>
+          <Button variant="outline" size="sm" onClick={goToday}>This Week</Button>
         </div>
-        
-        <Dialog open={isLogTimeOpen} onOpenChange={setIsLogTimeOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              Log Time
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Log Time</DialogTitle>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
+        <div className="flex items-center gap-4">
+          <div className="text-sm text-muted-foreground">
+            Week total: <span className="font-semibold text-foreground">{totalLoggedThisWeek}h</span>
+            <span className="text-muted-foreground"> / 40h</span>
+          </div>
+          <div className="w-32">
+            <Progress value={Math.min((totalLoggedThisWeek / 40) * 100, 100)} className="h-2" />
+          </div>
+        </div>
+      </div>
+
+      <div className="text-xs text-muted-foreground px-6 pb-2 shrink-0">
+        Click and drag on any day to create a time block
+      </div>
+
+      <div className="flex-1 overflow-auto px-6 pb-6">
+        <div className="flex h-full min-h-[640px] bg-card border rounded-xl overflow-hidden">
+          <div className="w-14 shrink-0 border-r bg-muted/20">
+            <div className="h-12 border-b" />
+            {hours.map((h) => (
+              <div key={h} className="h-16 border-b flex items-start justify-end pr-2 pt-1">
+                <span className="text-[10px] text-muted-foreground tabular-nums">
+                  {h === 12 ? "12p" : h > 12 ? `${h - 12}p` : `${h}a`}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex-1 grid grid-cols-7" ref={gridRef}>
+            {days.map((day, dIdx) => {
+              const isToday = isSameDay(day, new Date());
+              const dayBlocks = (timeblocks as any[]).filter((tb) =>
+                isSameDay(new Date(tb.date), day)
+              );
+              const isDragDay = drag && isSameDay(drag.day, day);
+              const dragTop = isDragDay
+                ? (Math.min(drag.startHour, drag.endHour) - HOUR_START) * CELL_HEIGHT
+                : 0;
+              const dragHeight = isDragDay
+                ? (Math.abs(drag.endHour - drag.startHour) + 1) * CELL_HEIGHT
+                : 0;
+
+              return (
+                <div key={dIdx} className="border-r last:border-0 flex flex-col">
+                  <div className={`h-12 border-b flex flex-col items-center justify-center shrink-0 ${isToday ? "bg-primary/5" : ""}`}>
+                    <span className="text-xs text-muted-foreground">{format(day, "EEE")}</span>
+                    <span className={`text-base font-semibold leading-none mt-0.5 w-7 h-7 flex items-center justify-center rounded-full ${isToday ? "bg-primary text-primary-foreground" : ""}`}>
+                      {format(day, "d")}
+                    </span>
+                  </div>
+
+                  <div
+                    className="relative flex-1 cursor-crosshair select-none"
+                    onMouseDown={(e) => handleMouseDown(e, day)}
+                    onMouseMove={(e) => handleMouseMove(e, day)}
+                    onMouseUp={(e) => handleMouseUp(e, day)}
+                  >
+                    {hours.map((h) => (
+                      <div
+                        key={h}
+                        className="h-16 border-b border-border/30 hover:bg-primary/[0.03] transition-colors"
+                      />
+                    ))}
+
+                    {isDragDay && dragHeight > 0 && (
+                      <div
+                        className="absolute left-1 right-1 bg-primary/20 border border-primary/50 rounded pointer-events-none z-10"
+                        style={{ top: dragTop, height: dragHeight }}
+                      />
+                    )}
+
+                    {dayBlocks.map((tb: any, idx: number) => {
+                      const color = getProjectColor(tb.projectId);
+                      return (
+                        <div
+                          key={tb.id}
+                          className="absolute left-1 right-1 rounded-md p-1.5 text-xs shadow-sm group cursor-pointer z-20"
+                          style={{
+                            top: 8 + idx * 72,
+                            minHeight: Math.max(tb.hours * CELL_HEIGHT, 36),
+                            backgroundColor: `${color}22`,
+                            borderLeft: `3px solid ${color}`,
+                          }}
+                        >
+                          <div className="font-semibold truncate" style={{ color }}>
+                            {tb.projectName}
+                          </div>
+                          {tb.phaseName && (
+                            <div className="text-muted-foreground text-[10px] truncate">{tb.phaseName}</div>
+                          )}
+                          {tb.subPhase && (
+                            <div className="text-muted-foreground text-[10px] truncate">{tb.subPhase}</div>
+                          )}
+                          <div className="text-muted-foreground">{tb.hours}h</div>
+                          <button
+                            className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
+                            onClick={(e) => { e.stopPropagation(); handleDelete(tb.id); }}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {modal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-card border rounded-xl shadow-2xl w-full max-w-md p-6 flex flex-col gap-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-bold">Log Time Block</h2>
+                {modal.day && (
+                  <p className="text-sm text-muted-foreground mt-0.5">
+                    {format(modal.day, "EEEE, MMMM d")} · {modal.startHour}:00 – {modal.startHour + modal.hours}:00
+                  </p>
+                )}
+              </div>
+              <button onClick={() => setModal({ open: false, day: null, startHour: 9, hours: 1 })} className="text-muted-foreground hover:text-foreground">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="grid gap-4">
               <div className="grid gap-2">
-                <Label>Project</Label>
-                <Select value={formData.projectId} onValueChange={v => setFormData({...formData, projectId: v})}>
-                  <SelectTrigger><SelectValue placeholder="Select Project" /></SelectTrigger>
+                <Label>Project <span className="text-destructive">*</span></Label>
+                <Select value={form.projectId} onValueChange={(v) => setForm({ ...form, projectId: v, phaseId: "" })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a project…" />
+                  </SelectTrigger>
                   <SelectContent>
-                    {uniqueProjects.map(a => (
-                      <SelectItem key={a.projectId} value={a.projectId}>{a.projectName}</SelectItem>
+                    {(projects as any[]).map((p: any) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        <div className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: p.color || "#4f46e5" }} />
+                          {p.name}
+                        </div>
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+
+              <div className="grid grid-cols-2 gap-3">
                 <div className="grid gap-2">
-                  <Label>Date</Label>
-                  <Input type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} />
+                  <Label>Phase</Label>
+                  <Select
+                    value={form.phaseId}
+                    onValueChange={(v) => setForm({ ...form, phaseId: v })}
+                    disabled={!form.projectId}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Phase…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(phases[form.projectId] || []).map((ph) => (
+                        <SelectItem key={ph.id} value={ph.id}>{ph.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="grid gap-2">
-                  <Label>Hours</Label>
-                  <Input type="number" min="0.5" step="0.5" value={formData.hours} onChange={e => setFormData({...formData, hours: e.target.value})} />
+                  <Label>Sub-phase</Label>
+                  <Select value={form.subPhase} onValueChange={(v) => setForm({ ...form, subPhase: v })}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Sub-phase…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SUB_PHASES.map((sp) => (
+                        <SelectItem key={sp} value={sp}>{sp}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
+
               <div className="grid gap-2">
-                <Label>Type</Label>
-                <Select value={formData.type} onValueChange={v => setFormData({...formData, type: v})}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="work">Work</SelectItem>
-                    <SelectItem value="meeting">Meeting</SelectItem>
-                    <SelectItem value="kickoff">Kickoff</SelectItem>
-                    <SelectItem value="deadline">Deadline</SelectItem>
-                    <SelectItem value="page_turn">Page Turn</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label>Hours</Label>
+                <Input
+                  type="number"
+                  min={0.25}
+                  max={24}
+                  step={0.25}
+                  value={modal.hours}
+                  onChange={(e) => setModal({ ...modal, hours: parseFloat(e.target.value) || 1 })}
+                />
               </div>
+
               <div className="grid gap-2">
-                <Label>Description</Label>
-                <Textarea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="What did you work on?" />
+                <Label>Notes</Label>
+                <Textarea
+                  placeholder="What did you work on?"
+                  value={form.description}
+                  onChange={(e) => setForm({ ...form, description: e.target.value })}
+                  rows={2}
+                />
               </div>
             </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsLogTimeOpen(false)}>Cancel</Button>
-              <Button onClick={handleLogTime} disabled={createTimeBlock.isPending || !formData.projectId}>Save</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </div>
 
-      <div className="flex items-center justify-between bg-card p-4 rounded-xl border">
-        <div className="flex flex-col gap-1 w-full max-w-sm">
-          <div className="flex justify-between text-sm">
-            <span className="font-medium text-muted-foreground">Weekly Target</span>
-            <span className="font-bold">{totalLoggedThisWeek} / 40 hrs</span>
-          </div>
-          <Progress 
-            value={Math.min((totalLoggedThisWeek / 40) * 100, 100)} 
-            className="h-2" 
-            indicatorClassName={totalLoggedThisWeek > 40 ? "bg-destructive" : "bg-primary"}
-          />
-        </div>
-      </div>
-
-      <div className="flex flex-1 gap-6 min-h-0">
-        <div className="w-80 flex flex-col gap-4 overflow-y-auto pr-2">
-          <h3 className="font-semibold text-lg">My Allocations</h3>
-          {allocations.map(alloc => {
-            const percent = alloc.allocatedHours > 0 ? Math.min((alloc.loggedHours / alloc.allocatedHours) * 100, 100) : 0;
-            return (
-              <Card key={alloc.id} className="p-4 flex flex-col gap-3">
-                <div className="flex justify-between items-start">
-                  <div className="font-medium">{alloc.projectName}</div>
-                  {alloc.projectColor && (
-                    <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: alloc.projectColor }} />
-                  )}
-                </div>
-                {alloc.phaseName && <div className="text-sm text-muted-foreground">{alloc.phaseName}</div>}
-                
-                <div className="flex flex-col gap-1">
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>{alloc.loggedHours}h logged</span>
-                    <span>{alloc.allocatedHours}h total</span>
-                  </div>
-                  <Progress value={percent} className="h-1.5" />
-                </div>
-                
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="w-full mt-2"
-                  onClick={() => {
-                    setFormData({...formData, projectId: alloc.projectId});
-                    setIsLogTimeOpen(true);
-                  }}
-                >
-                  <Plus className="h-3 w-3 mr-2" /> Add Time
-                </Button>
-              </Card>
-            );
-          })}
-          {allocations.length === 0 && (
-            <div className="text-sm text-muted-foreground p-4 text-center border border-dashed rounded-lg">
-              No allocations this week.
-            </div>
-          )}
-        </div>
-
-        <div className="flex-1 bg-card border rounded-xl overflow-hidden flex flex-col">
-          <div className="grid grid-cols-7 border-b bg-muted/20">
-            {days.map((day, i) => (
-              <div key={i} className="p-3 text-center border-r last:border-0">
-                <div className="text-sm text-muted-foreground mb-1">{format(day, "EEE")}</div>
-                <div className={`text-xl font-medium ${isSameDay(day, new Date()) ? "text-primary bg-primary/10 rounded-full w-8 h-8 flex items-center justify-center mx-auto" : ""}`}>
-                  {format(day, "d")}
-                </div>
-              </div>
-            ))}
-          </div>
-          
-          <div className="flex-1 overflow-y-auto relative">
-            <div className="grid grid-cols-7 h-[800px]">
-              {days.map((day, dIdx) => (
-                <div key={dIdx} className="border-r last:border-0 relative">
-                  {hours.map((_, hIdx) => (
-                    <div key={hIdx} className="border-b h-[61px] opacity-10" />
-                  ))}
-                  
-                  {timeblocks.filter(tb => isSameDay(new Date(tb.date), day)).map((tb, idx) => (
-                    <div 
-                      key={tb.id} 
-                      className={`absolute left-1 right-1 p-2 rounded-md text-xs border shadow-sm ${
-                        tb.type === 'kickoff' ? 'border-green-500 bg-green-500/10' : 
-                        tb.type === 'deadline' ? 'border-red-500 bg-red-500/10' : 
-                        tb.type === 'page_turn' ? 'border-purple-500 bg-purple-500/10' : 
-                        'bg-background'
-                      }`}
-                      style={{
-                        top: `${idx * (tb.hours * 60 + 5) + 10}px`, // Simple stacking for overlapping time blocks
-                        height: `${tb.hours * 60}px`,
-                        borderLeftWidth: '4px',
-                        borderLeftColor: tb.type === 'work' || tb.type === 'meeting' ? (tb.projectColor || 'var(--primary)') : undefined,
-                      }}
-                    >
-                      <div className="font-semibold truncate">{tb.projectName}</div>
-                      <div className="text-muted-foreground">{tb.hours}h {tb.type !== 'work' ? ` - ${tb.type.replace('_', ' ')}` : ''}</div>
-                    </div>
-                  ))}
-                </div>
-              ))}
+            <div className="flex justify-end gap-3 pt-1">
+              <Button variant="outline" onClick={() => setModal({ open: false, day: null, startHour: 9, hours: 1 })}>
+                Cancel
+              </Button>
+              <Button onClick={handleSave} disabled={createTimeBlock.isPending}>
+                {createTimeBlock.isPending ? "Saving…" : "Save Block"}
+              </Button>
             </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
