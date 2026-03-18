@@ -16,7 +16,7 @@ export const timeBlockTypeEnum = pgEnum("time_block_type", [
 
 export const timeBlocksTable = pgTable("time_blocks", {
   id: text("id").primaryKey(),
-  userId: text("user_id").notNull().references(() => usersTable.id),
+  userId: text("user_id").references(() => usersTable.id),
   projectId: text("project_id").notNull().references(() => projectsTable.id),
   phaseId: text("phase_id").references(() => phasesTable.id),
   allocationId: text("allocation_id").references(() => allocationsTable.id),

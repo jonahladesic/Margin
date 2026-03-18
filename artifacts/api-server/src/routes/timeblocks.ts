@@ -73,7 +73,7 @@ router.post("/timeblocks", async (req, res) => {
     .insert(timeBlocksTable)
     .values({
       id: randomUUID(),
-      userId: userId || "anonymous",
+      userId: userId || null,
       projectId,
       phaseId: phaseId || null,
       allocationId: allocationId || null,
