@@ -212,10 +212,10 @@ export default function Invoices() {
             <div className="grid grid-cols-2 gap-3">
               <div className="grid gap-2">
                 <Label>Client</Label>
-                <Select value={projForm.clientId} onValueChange={(v) => setP("clientId", v)}>
+                <Select value={projForm.clientId || "none"} onValueChange={(v) => setP("clientId", v === "none" ? "" : v)}>
                   <SelectTrigger><SelectValue placeholder="No client" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">No client</SelectItem>
+                    <SelectItem value="none">No client</SelectItem>
                     {(clients as any[]).map((c: any) => (
                       <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                     ))}

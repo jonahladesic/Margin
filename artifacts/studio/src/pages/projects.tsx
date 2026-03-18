@@ -133,10 +133,10 @@ export default function Projects() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="grid gap-2">
                   <Label>Client</Label>
-                  <Select value={formData.clientId} onValueChange={(v) => set("clientId", v)}>
+                  <Select value={formData.clientId || "none"} onValueChange={(v) => set("clientId", v === "none" ? "" : v)}>
                     <SelectTrigger><SelectValue placeholder="No client" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">No client</SelectItem>
+                      <SelectItem value="none">No client</SelectItem>
                       {(clients as any[]).map((c: any) => (
                         <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                       ))}
