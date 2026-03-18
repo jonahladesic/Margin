@@ -42,22 +42,25 @@ export async function seedRSMInternal() {
   }
 
   const existingPhases = await db
-    .select()
+    .select({ name: phasesTable.name })
     .from(phasesTable)
     .where(eq(phasesTable.projectId, projectId));
 
-  if (existingPhases.length === 0) {
+  const existingNames = new Set(existingPhases.map((p) => p.name));
+  const missingPhases = RSM_INTERNAL_PHASES.filter((name) => !existingNames.has(name));
+
+  if (missingPhases.length > 0) {
     await db.insert(phasesTable).values(
-      RSM_INTERNAL_PHASES.map((name, idx) => ({
+      missingPhases.map((name, idx) => ({
         id: randomUUID(),
         projectId,
         name,
         budgetedHours: "0",
         status: "upcoming" as const,
         enabled: true,
-        sortOrder: String(idx),
+        sortOrder: String(existingPhases.length + idx),
       }))
     );
-    console.log("Seeded RSM Internal overhead phases");
+    console.log(`Seeded RSM Internal phases: ${missingPhases.join(", ")}`);
   }
 }

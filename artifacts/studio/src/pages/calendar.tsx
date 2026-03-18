@@ -310,7 +310,7 @@ export default function Calendar() {
       hours: h,
       label: breakForm.label || "Break",
     });
-    setBreakModal({ open: false, day: null, startHour: 12, hours: 0.5 });
+    setBreakModal({ open: false, day: null, startHour: 12, hours: 0.5, anchorX: 0, anchorY: 0 });
     setBreakForm({ label: "Lunch", hours: "0.5" });
   };
 
