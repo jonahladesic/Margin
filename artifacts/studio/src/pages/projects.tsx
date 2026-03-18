@@ -342,14 +342,14 @@ export default function Projects() {
                         </button>
                       </div>
                     ))}
-
-                    {/* Running total below phase list */}
-                    <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-primary/5 border border-primary/10">
-                      <span className="text-sm text-muted-foreground">Total scoped</span>
-                      <span className="text-sm font-bold text-foreground">{totalPhaseHours}h</span>
-                    </div>
                   </div>
                 )}
+
+                {/* Running total — always visible */}
+                <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-primary/5 border border-primary/10">
+                  <span className="text-sm text-muted-foreground">Total scoped</span>
+                  <span className="text-sm font-bold text-foreground">{totalPhaseHours}h</span>
+                </div>
 
                 {/* Custom phase input */}
                 <div className="flex gap-2">
