@@ -22,6 +22,9 @@ export interface TimeBlock {
   type: TimeBlockType;
   title?: string | null;
   description?: string | null;
+  subPhase?: string | null;
+  /** Start time as fractional hours (e.g. 9.25 = 9:15am) */
+  startTime?: number | null;
   approved: boolean;
   createdAt: Date;
 }

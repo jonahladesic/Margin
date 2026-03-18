@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, addDays, isSameDay } from "date-fns";
-import { ChevronLeft, ChevronRight, X, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, X, ChevronDown, ChevronUp } from "lucide-react";
 import { useListTimeBlocks, useCreateTimeBlock, useDeleteTimeBlock } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -11,20 +11,46 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 
-const PHASES = ["Discovery", "Vision", "Brand Identity", "Brand Standards"];
 const SUB_PHASES = ["Project", "Design", "Meetings", "Internal Meetings"];
-const HOUR_START = 8;
-const HOUR_END = 20;
-const CELL_HEIGHT = 64;
 
-const PROJECT_COLORS = [
-  "#4f46e5","#0ea5e9","#10b981","#f59e0b","#ef4444","#8b5cf6","#ec4899","#14b8a6"
-];
+const HOUR_START = 0;
+const HOUR_END = 24;
+const CELL_HEIGHT = 16;
+const SLOTS_PER_HOUR = 4;
+const SLOT_HEIGHT = CELL_HEIGHT;
+const TOTAL_SLOTS = (HOUR_END - HOUR_START) * SLOTS_PER_HOUR;
+
+function slotToHours(slot: number): number {
+  return slot / SLOTS_PER_HOUR;
+}
+
+function hoursToSlot(hours: number): number {
+  return Math.round(hours * SLOTS_PER_HOUR);
+}
+
+function formatSlotTime(slot: number): string {
+  const totalMin = slot * 15;
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  const period = h >= 12 ? "pm" : "am";
+  const displayH = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return m === 0 ? `${displayH}${period}` : `${displayH}:${String(m).padStart(2, "0")}${period}`;
+}
 
 interface DragState {
   day: Date;
-  startHour: number;
-  endHour: number;
+  startSlot: number;
+  endSlot: number;
+}
+
+interface BlockDragState {
+  blockId: string;
+  blockData: any;
+  startSlot: number;
+  originalDay: Date;
+  currentDay: Date;
+  currentSlot: number;
+  isAlt: boolean;
 }
 
 interface ModalState {
@@ -39,10 +65,14 @@ export default function Calendar() {
   const queryClient = useQueryClient();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [drag, setDrag] = useState<DragState | null>(null);
+  const [blockDrag, setBlockDrag] = useState<BlockDragState | null>(null);
   const [modal, setModal] = useState<ModalState>({ open: false, day: null, startHour: 9, hours: 1 });
   const [form, setForm] = useState({ projectId: "", phaseId: "", subPhase: "", description: "" });
+  const [panelOpen, setPanelOpen] = useState(true);
   const isDragging = useRef(false);
+  const isBlockDragging = useRef(false);
   const gridRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
   const weekEnd = endOfWeek(currentDate, { weekStartsOn: 1 });
@@ -56,6 +86,8 @@ export default function Calendar() {
       return r.json();
     },
   });
+
+  const activeProjects = (projects as any[]).filter((p: any) => p.status === "active" || !p.status);
 
   const { data: timeblocks = [] } = useListTimeBlocks({
     request: {
@@ -84,35 +116,52 @@ export default function Calendar() {
 
   const totalLoggedThisWeek = (timeblocks as any[]).reduce((acc: number, tb: any) => acc + (tb.hours || 0), 0);
 
-  const getHourFromY = useCallback((y: number, colEl: Element) => {
+  useEffect(() => {
+    if (scrollRef.current) {
+      const now = new Date();
+      const currentSlot = now.getHours() * SLOTS_PER_HOUR;
+      const scrollTop = currentSlot * SLOT_HEIGHT - scrollRef.current.clientHeight / 2;
+      scrollRef.current.scrollTop = Math.max(0, scrollTop);
+    }
+  }, []);
+
+  const getSlotFromY = useCallback((y: number, colEl: Element) => {
     const rect = colEl.getBoundingClientRect();
-    const relY = y - rect.top;
-    const hour = Math.floor(relY / CELL_HEIGHT) + HOUR_START;
-    return Math.max(HOUR_START, Math.min(HOUR_END - 1, hour));
+    const relY = y - rect.top + (scrollRef.current?.scrollTop ?? 0);
+    const slot = Math.floor(relY / SLOT_HEIGHT);
+    return Math.max(0, Math.min(TOTAL_SLOTS - 1, slot));
+  }, []);
+
+  const getSlotFromClientY = useCallback((clientY: number, colEl: Element) => {
+    const rect = colEl.getBoundingClientRect();
+    const relY = clientY - rect.top;
+    const slot = Math.floor(relY / SLOT_HEIGHT);
+    return Math.max(0, Math.min(TOTAL_SLOTS - 1, slot));
   }, []);
 
   const handleMouseDown = (e: React.MouseEvent, day: Date) => {
     if (e.button !== 0) return;
     e.preventDefault();
     const col = e.currentTarget as Element;
-    const hour = getHourFromY(e.clientY, col);
+    const slot = getSlotFromClientY(e.clientY, col);
     isDragging.current = true;
-    setDrag({ day, startHour: hour, endHour: hour });
+    setDrag({ day, startSlot: slot, endSlot: slot });
   };
 
   const handleMouseMove = (e: React.MouseEvent, day: Date) => {
     if (!isDragging.current || !drag || !isSameDay(drag.day, day)) return;
     const col = e.currentTarget as Element;
-    const hour = getHourFromY(e.clientY, col);
-    setDrag((d) => d ? { ...d, endHour: hour } : null);
+    const slot = getSlotFromClientY(e.clientY, col);
+    setDrag((d) => d ? { ...d, endSlot: slot } : null);
   };
 
   const handleMouseUp = (e: React.MouseEvent, day: Date) => {
     if (!isDragging.current || !drag || !isSameDay(drag.day, day)) return;
     isDragging.current = false;
-    const startHour = Math.min(drag.startHour, drag.endHour);
-    const endHour = Math.max(drag.startHour, drag.endHour) + 1;
-    const hours = Math.max(0.5, endHour - startHour);
+    const startSlot = Math.min(drag.startSlot, drag.endSlot);
+    const endSlot = Math.max(drag.startSlot, drag.endSlot) + 1;
+    const hours = Math.max(0.25, slotToHours(endSlot - startSlot));
+    const startHour = slotToHours(startSlot);
     setDrag(null);
     setModal({ open: true, day, startHour, hours });
     setForm({ projectId: "", phaseId: "", subPhase: "", description: "" });
@@ -124,17 +173,126 @@ export default function Calendar() {
         isDragging.current = false;
         setDrag(null);
       }
+      if (isBlockDragging.current) {
+        isBlockDragging.current = false;
+        setBlockDrag(null);
+      }
     };
     window.addEventListener("mouseup", handleGlobalMouseUp);
     return () => window.removeEventListener("mouseup", handleGlobalMouseUp);
   }, []);
+
+  const handleBlockMouseDown = (e: React.MouseEvent, tb: any) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const isAlt = e.altKey;
+    const blockStartSlot = hoursToSlot(tb.startTime ?? 0);
+
+    const col = (e.currentTarget as HTMLElement).closest("[data-day-col]") as Element;
+    const slot = col ? getSlotFromClientY(e.clientY, col) : blockStartSlot;
+
+    isBlockDragging.current = true;
+    setBlockDrag({
+      blockId: tb.id,
+      blockData: tb,
+      startSlot: slot,
+      originalDay: new Date(tb.date),
+      currentDay: new Date(tb.date),
+      currentSlot: slot,
+      isAlt,
+    });
+  };
+
+  const handleDayMouseMove = (e: React.MouseEvent, day: Date) => {
+    if (isDragging.current && drag && isSameDay(drag.day, day)) {
+      const col = e.currentTarget as Element;
+      const slot = getSlotFromClientY(e.clientY, col);
+      setDrag((d) => d ? { ...d, endSlot: slot } : null);
+      return;
+    }
+    if (isBlockDragging.current && blockDrag) {
+      const col = e.currentTarget as Element;
+      const slot = getSlotFromClientY(e.clientY, col);
+      setBlockDrag((bd) => bd ? { ...bd, currentDay: day, currentSlot: slot } : null);
+    }
+  };
+
+  const handleDayMouseUp = (e: React.MouseEvent, day: Date) => {
+    if (isDragging.current && drag && isSameDay(drag.day, day)) {
+      handleMouseUp(e, day);
+      return;
+    }
+    if (isBlockDragging.current && blockDrag) {
+      isBlockDragging.current = false;
+      const tb = blockDrag.blockData;
+      const dropSlot = blockDrag.currentSlot;
+      const dropDay = day;
+      const startHour = slotToHours(dropSlot);
+      const hours = tb.hours || 1;
+
+      if (blockDrag.isAlt) {
+        createTimeBlock.mutate(
+          {
+            data: {
+              projectId: tb.projectId,
+              phaseId: tb.phaseId || undefined,
+              date: format(dropDay, "yyyy-MM-dd"),
+              hours,
+              startTime: startHour,
+              subPhase: tb.subPhase || undefined,
+              description: tb.description || undefined,
+              type: tb.type || "work",
+            } as any,
+          },
+          {
+            onSuccess: () => {
+              toast({ title: "Block cloned" });
+              queryClient.invalidateQueries({ queryKey: ["/api/timeblocks"] });
+            },
+            onError: () => toast({ title: "Failed to clone block", variant: "destructive" }),
+          }
+        );
+      }
+      setBlockDrag(null);
+    }
+  };
+
+  const handleProjectDragStart = (e: React.DragEvent, project: any) => {
+    e.dataTransfer.setData("projectId", project.id);
+    e.dataTransfer.setData("projectName", project.name);
+    e.dataTransfer.effectAllowed = "copy";
+  };
+
+  const handleDayDragOver = (e: React.DragEvent, _day: Date) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  };
+
+  const handleDayDrop = (e: React.DragEvent, day: Date) => {
+    e.preventDefault();
+    const projectId = e.dataTransfer.getData("projectId");
+    if (!projectId) return;
+
+    const col = e.currentTarget as Element;
+    const slot = getSlotFromClientY(e.clientY, col);
+    const startHour = slotToHours(slot);
+
+    setModal({ open: true, day, startHour, hours: 1 });
+    setForm((f) => ({ ...f, projectId, phaseId: "", subPhase: "", description: "" }));
+
+    if (!phases[projectId]) {
+      fetch(`/api/projects/${projectId}/phases`)
+        .then((r) => r.json())
+        .then((data) => setPhases((prev) => ({ ...prev, [projectId]: data })));
+    }
+  };
 
   const handleSave = () => {
     if (!form.projectId || !modal.day) {
       toast({ title: "Please select a project", variant: "destructive" });
       return;
     }
-    const selectedPhase = phases[form.projectId]?.find((p) => p.id === form.phaseId);
     createTimeBlock.mutate(
       {
         data: {
@@ -142,6 +300,7 @@ export default function Calendar() {
           phaseId: form.phaseId || undefined,
           date: format(modal.day, "yyyy-MM-dd"),
           hours: modal.hours,
+          startTime: modal.startHour,
           subPhase: form.subPhase || undefined,
           description: form.description || undefined,
           type: "work",
@@ -168,8 +327,16 @@ export default function Calendar() {
   };
 
   const getProjectColor = (projectId: string) => {
-    const proj = (projects as any[]).find((p) => p.id === projectId);
+    const proj = (projects as any[]).find((p: any) => p.id === projectId);
     return proj?.color || "#4f46e5";
+  };
+
+  const closeModal = () => setModal({ open: false, day: null, startHour: 9, hours: 1 });
+
+  const formatTimeRange = (startHour: number, hours: number) => {
+    const startSlot = hoursToSlot(startHour);
+    const endSlot = hoursToSlot(startHour + hours);
+    return `${formatSlotTime(startSlot)} – ${formatSlotTime(endSlot)}`;
   };
 
   return (
@@ -202,101 +369,203 @@ export default function Calendar() {
       </div>
 
       <div className="text-xs text-muted-foreground px-6 pb-2 shrink-0">
-        Click and drag on any day to create a time block
+        Drag to create · Alt+drag a block to clone · Drag a project from the panel to schedule it
       </div>
 
-      <div className="flex-1 overflow-auto px-6 pb-6">
-        <div className="flex h-full min-h-[640px] bg-card border rounded-xl overflow-hidden">
-          <div className="w-14 shrink-0 border-r bg-muted/20">
-            <div className="h-12 border-b" />
-            {hours.map((h) => (
-              <div key={h} className="h-16 border-b flex items-start justify-end pr-2 pt-1">
-                <span className="text-[10px] text-muted-foreground tabular-nums">
-                  {h === 12 ? "12p" : h > 12 ? `${h - 12}p` : `${h}a`}
-                </span>
+      <div className="flex-1 flex overflow-hidden px-6 pb-6 gap-3">
+        <div className={`flex flex-col shrink-0 transition-all duration-200 ${panelOpen ? "w-44" : "w-8"}`}>
+          <div className="bg-card border rounded-xl overflow-hidden flex flex-col h-full">
+            <button
+              onClick={() => setPanelOpen(!panelOpen)}
+              className="flex items-center justify-between px-3 py-2.5 border-b hover:bg-muted/50 transition-colors text-sm font-semibold shrink-0 w-full"
+            >
+              {panelOpen ? (
+                <>
+                  <span>Projects</span>
+                  <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
+                </>
+              ) : (
+                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground mx-auto" />
+              )}
+            </button>
+            {panelOpen && (
+              <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-1.5">
+                {activeProjects.length === 0 ? (
+                  <p className="text-xs text-muted-foreground text-center py-4 px-2">No active projects</p>
+                ) : (
+                  activeProjects.map((proj: any) => (
+                    <div
+                      key={proj.id}
+                      draggable
+                      onDragStart={(e) => handleProjectDragStart(e, proj)}
+                      className="flex items-center gap-2 px-2 py-1.5 rounded-md cursor-grab active:cursor-grabbing hover:bg-muted/60 transition-colors select-none"
+                      title={`Drag to schedule ${proj.name}`}
+                    >
+                      <span
+                        className="w-2.5 h-2.5 rounded-full shrink-0"
+                        style={{ backgroundColor: proj.color || "#4f46e5" }}
+                      />
+                      <span className="text-xs font-medium truncate">{proj.name}</span>
+                    </div>
+                  ))
+                )}
               </div>
-            ))}
+            )}
           </div>
+        </div>
 
-          <div className="flex-1 grid grid-cols-7" ref={gridRef}>
+        <div className="flex-1 overflow-hidden bg-card border rounded-xl flex flex-col">
+          <div className="flex shrink-0">
+            <div className="w-14 shrink-0 border-r bg-muted/20" />
             {days.map((day, dIdx) => {
               const isToday = isSameDay(day, new Date());
-              const dayBlocks = (timeblocks as any[]).filter((tb) =>
-                isSameDay(new Date(tb.date), day)
-              );
-              const isDragDay = drag && isSameDay(drag.day, day);
-              const dragTop = isDragDay
-                ? (Math.min(drag.startHour, drag.endHour) - HOUR_START) * CELL_HEIGHT
-                : 0;
-              const dragHeight = isDragDay
-                ? (Math.abs(drag.endHour - drag.startHour) + 1) * CELL_HEIGHT
-                : 0;
-
               return (
-                <div key={dIdx} className="border-r last:border-0 flex flex-col">
-                  <div className={`h-12 border-b flex flex-col items-center justify-center shrink-0 ${isToday ? "bg-primary/5" : ""}`}>
-                    <span className="text-xs text-muted-foreground">{format(day, "EEE")}</span>
-                    <span className={`text-base font-semibold leading-none mt-0.5 w-7 h-7 flex items-center justify-center rounded-full ${isToday ? "bg-primary text-primary-foreground" : ""}`}>
-                      {format(day, "d")}
-                    </span>
-                  </div>
-
-                  <div
-                    className="relative flex-1 cursor-crosshair select-none"
-                    onMouseDown={(e) => handleMouseDown(e, day)}
-                    onMouseMove={(e) => handleMouseMove(e, day)}
-                    onMouseUp={(e) => handleMouseUp(e, day)}
-                  >
-                    {hours.map((h) => (
-                      <div
-                        key={h}
-                        className="h-16 border-b border-border/30 hover:bg-primary/[0.03] transition-colors"
-                      />
-                    ))}
-
-                    {isDragDay && dragHeight > 0 && (
-                      <div
-                        className="absolute left-1 right-1 bg-primary/20 border border-primary/50 rounded pointer-events-none z-10"
-                        style={{ top: dragTop, height: dragHeight }}
-                      />
-                    )}
-
-                    {dayBlocks.map((tb: any, idx: number) => {
-                      const color = getProjectColor(tb.projectId);
-                      return (
-                        <div
-                          key={tb.id}
-                          className="absolute left-1 right-1 rounded-md p-1.5 text-xs shadow-sm group cursor-pointer z-20"
-                          style={{
-                            top: 8 + idx * 72,
-                            minHeight: Math.max(tb.hours * CELL_HEIGHT, 36),
-                            backgroundColor: `${color}22`,
-                            borderLeft: `3px solid ${color}`,
-                          }}
-                        >
-                          <div className="font-semibold truncate" style={{ color }}>
-                            {tb.projectName}
-                          </div>
-                          {tb.phaseName && (
-                            <div className="text-muted-foreground text-[10px] truncate">{tb.phaseName}</div>
-                          )}
-                          {tb.subPhase && (
-                            <div className="text-muted-foreground text-[10px] truncate">{tb.subPhase}</div>
-                          )}
-                          <div className="text-muted-foreground">{tb.hours}h</div>
-                          <button
-                            className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
-                            onClick={(e) => { e.stopPropagation(); handleDelete(tb.id); }}
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
+                <div
+                  key={dIdx}
+                  className={`flex-1 h-12 border-b border-r last:border-r-0 flex flex-col items-center justify-center ${isToday ? "bg-primary/5" : ""}`}
+                >
+                  <span className="text-xs text-muted-foreground">{format(day, "EEE")}</span>
+                  <span className={`text-base font-semibold leading-none mt-0.5 w-7 h-7 flex items-center justify-center rounded-full ${isToday ? "bg-primary text-primary-foreground" : ""}`}>
+                    {format(day, "d")}
+                  </span>
                 </div>
               );
             })}
+          </div>
+
+          <div className="flex-1 overflow-y-auto" ref={scrollRef}>
+            <div className="flex" style={{ height: TOTAL_SLOTS * SLOT_HEIGHT }}>
+              <div className="w-14 shrink-0 border-r bg-muted/20 relative">
+                {hours.map((h) => (
+                  <div
+                    key={h}
+                    className="absolute w-full border-b border-border/20 flex items-start justify-end pr-2 pt-0.5"
+                    style={{ top: h * SLOTS_PER_HOUR * SLOT_HEIGHT, height: SLOTS_PER_HOUR * SLOT_HEIGHT }}
+                  >
+                    <span className="text-[10px] text-muted-foreground tabular-nums">
+                      {h === 0 ? "12a" : h === 12 ? "12p" : h > 12 ? `${h - 12}p` : `${h}a`}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex-1 grid grid-cols-7" ref={gridRef}>
+                {days.map((day, dIdx) => {
+                  const isToday = isSameDay(day, new Date());
+                  const dayBlocks = (timeblocks as any[]).filter((tb) =>
+                    isSameDay(new Date(tb.date), day)
+                  );
+                  const isDragDay = drag && isSameDay(drag.day, day);
+                  const dragStartSlot = isDragDay ? Math.min(drag.startSlot, drag.endSlot) : 0;
+                  const dragEndSlot = isDragDay ? Math.max(drag.startSlot, drag.endSlot) + 1 : 0;
+                  const dragTop = dragStartSlot * SLOT_HEIGHT;
+                  const dragHeight = (dragEndSlot - dragStartSlot) * SLOT_HEIGHT;
+
+                  const isBlockDragDay = blockDrag && isSameDay(blockDrag.currentDay, day);
+
+                  return (
+                    <div
+                      key={dIdx}
+                      data-day-col
+                      className={`border-r last:border-0 relative cursor-crosshair select-none ${isToday ? "bg-primary/[0.015]" : ""}`}
+                      style={{ height: TOTAL_SLOTS * SLOT_HEIGHT }}
+                      onMouseDown={(e) => {
+                        if (!(e.target as HTMLElement).closest("[data-block]")) {
+                          handleMouseDown(e, day);
+                        }
+                      }}
+                      onMouseMove={(e) => handleDayMouseMove(e, day)}
+                      onMouseUp={(e) => handleDayMouseUp(e, day)}
+                      onDragOver={(e) => handleDayDragOver(e, day)}
+                      onDrop={(e) => handleDayDrop(e, day)}
+                    >
+                      {hours.map((h) => (
+                        <div key={h}>
+                          <div
+                            className="border-b border-border/30"
+                            style={{ height: SLOT_HEIGHT, top: h * SLOTS_PER_HOUR * SLOT_HEIGHT }}
+                          />
+                          <div
+                            className="border-b border-border/10"
+                            style={{ height: SLOT_HEIGHT }}
+                          />
+                          <div
+                            className="border-b border-border/10"
+                            style={{ height: SLOT_HEIGHT }}
+                          />
+                          <div
+                            className="border-b border-border/10"
+                            style={{ height: SLOT_HEIGHT }}
+                          />
+                        </div>
+                      ))}
+
+                      {isDragDay && dragHeight > 0 && (
+                        <div
+                          className="absolute left-0.5 right-0.5 bg-primary/20 border border-primary/50 rounded pointer-events-none z-10"
+                          style={{ top: dragTop, height: dragHeight }}
+                        />
+                      )}
+
+                      {isBlockDragDay && blockDrag && (
+                        <div
+                          className="absolute left-0.5 right-0.5 rounded-md pointer-events-none z-30 opacity-70 border-2"
+                          style={{
+                            top: blockDrag.currentSlot * SLOT_HEIGHT,
+                            height: Math.max(hoursToSlot(blockDrag.blockData.hours || 1) * SLOT_HEIGHT, 20),
+                            backgroundColor: `${getProjectColor(blockDrag.blockData.projectId)}33`,
+                            borderColor: getProjectColor(blockDrag.blockData.projectId),
+                          }}
+                        />
+                      )}
+
+                      {dayBlocks.map((tb: any, idx: number) => {
+                        const color = getProjectColor(tb.projectId);
+                        const blockHours = tb.hours || 1;
+                        const blockHeightPx = Math.max(hoursToSlot(blockHours) * SLOT_HEIGHT, 20);
+                        const hasStartTime = tb.startTime != null && !isNaN(tb.startTime);
+                        const topOffset = hasStartTime
+                          ? hoursToSlot(tb.startTime) * SLOT_HEIGHT
+                          : idx * (blockHeightPx + 2) + 1;
+
+                        return (
+                          <div
+                            key={tb.id}
+                            data-block
+                            className="absolute left-0.5 right-0.5 rounded-md p-1.5 text-xs shadow-sm group cursor-grab active:cursor-grabbing z-20 overflow-hidden"
+                            style={{
+                              top: topOffset,
+                              height: blockHeightPx,
+                              backgroundColor: `${color}22`,
+                              borderLeft: `3px solid ${color}`,
+                            }}
+                            onMouseDown={(e) => handleBlockMouseDown(e, tb)}
+                            title="Alt+drag to clone"
+                          >
+                            <div className="font-semibold truncate" style={{ color }}>
+                              {tb.projectName}
+                            </div>
+                            {tb.phaseName && (
+                              <div className="text-muted-foreground text-[10px] truncate">{tb.phaseName}</div>
+                            )}
+                            {tb.subPhase && (
+                              <div className="text-muted-foreground text-[10px] truncate">{tb.subPhase}</div>
+                            )}
+                            <div className="text-muted-foreground">{tb.hours}h</div>
+                            <button
+                              className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
+                              onClick={(e) => { e.stopPropagation(); handleDelete(tb.id); }}
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -309,11 +578,11 @@ export default function Calendar() {
                 <h2 className="text-lg font-bold">Log Time Block</h2>
                 {modal.day && (
                   <p className="text-sm text-muted-foreground mt-0.5">
-                    {format(modal.day, "EEEE, MMMM d")} · {modal.startHour}:00 – {modal.startHour + modal.hours}:00
+                    {format(modal.day, "EEEE, MMMM d")} · {formatTimeRange(modal.startHour, modal.hours)}
                   </p>
                 )}
               </div>
-              <button onClick={() => setModal({ open: false, day: null, startHour: 9, hours: 1 })} className="text-muted-foreground hover:text-foreground">
+              <button onClick={closeModal} className="text-muted-foreground hover:text-foreground">
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -395,7 +664,7 @@ export default function Calendar() {
             </div>
 
             <div className="flex justify-end gap-3 pt-1">
-              <Button variant="outline" onClick={() => setModal({ open: false, day: null, startHour: 9, hours: 1 })}>
+              <Button variant="outline" onClick={closeModal}>
                 Cancel
               </Button>
               <Button onClick={handleSave} disabled={createTimeBlock.isPending}>

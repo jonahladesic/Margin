@@ -26,6 +26,7 @@ export const timeBlocksTable = pgTable("time_blocks", {
   title: text("title"),
   subPhase: text("sub_phase"),
   description: text("description"),
+  startTime: numeric("start_time", { precision: 5, scale: 2 }),
   approved: boolean("approved").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),

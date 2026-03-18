@@ -14,7 +14,10 @@ export interface CreateTimeBlockRequest {
   allocationId?: string | null;
   date: Date;
   hours: number;
+  /** Start time as fractional hours (e.g. 9.25 = 9:15am) */
+  startTime?: number | null;
   type: CreateTimeBlockRequestType;
   title?: string | null;
+  subPhase?: string | null;
   description?: string | null;
 }

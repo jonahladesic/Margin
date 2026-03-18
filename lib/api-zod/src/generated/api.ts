@@ -476,6 +476,11 @@ export const ListTimeBlocksResponseItem = zod.object({
   type: zod.enum(["work", "meeting", "kickoff", "deadline", "page_turn"]),
   title: zod.string().nullish(),
   description: zod.string().nullish(),
+  subPhase: zod.string().nullish(),
+  startTime: zod
+    .number()
+    .nullish()
+    .describe("Start time as fractional hours (e.g. 9.25 = 9:15am)"),
   approved: zod.boolean(),
   createdAt: zod.date(),
 });
@@ -491,8 +496,13 @@ export const CreateTimeBlockBody = zod.object({
   allocationId: zod.string().nullish(),
   date: zod.date(),
   hours: zod.number(),
+  startTime: zod
+    .number()
+    .nullish()
+    .describe("Start time as fractional hours (e.g. 9.25 = 9:15am)"),
   type: zod.enum(["work", "meeting", "kickoff", "deadline", "page_turn"]),
   title: zod.string().nullish(),
+  subPhase: zod.string().nullish(),
   description: zod.string().nullish(),
 });
 
@@ -529,6 +539,11 @@ export const UpdateTimeBlockResponse = zod.object({
   type: zod.enum(["work", "meeting", "kickoff", "deadline", "page_turn"]),
   title: zod.string().nullish(),
   description: zod.string().nullish(),
+  subPhase: zod.string().nullish(),
+  startTime: zod
+    .number()
+    .nullish()
+    .describe("Start time as fractional hours (e.g. 9.25 = 9:15am)"),
   approved: zod.boolean(),
   createdAt: zod.date(),
 });

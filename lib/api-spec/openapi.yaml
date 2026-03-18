@@ -1301,6 +1301,13 @@ components:
         description:
           type: string
           nullable: true
+        subPhase:
+          type: string
+          nullable: true
+        startTime:
+          type: number
+          nullable: true
+          description: Start time as fractional hours (e.g. 9.25 = 9:15am)
         approved:
           type: boolean
         createdAt:
@@ -1336,10 +1343,17 @@ components:
           format: date
         hours:
           type: number
+        startTime:
+          type: number
+          nullable: true
+          description: Start time as fractional hours (e.g. 9.25 = 9:15am)
         type:
           type: string
           enum: [work, meeting, kickoff, deadline, page_turn]
         title:
+          type: string
+          nullable: true
+        subPhase:
           type: string
           nullable: true
         description:

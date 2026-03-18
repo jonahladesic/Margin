@@ -36,6 +36,7 @@ async function formatTimeBlock(tb: typeof timeBlocksTable.$inferSelect) {
     allocationId: tb.allocationId,
     date: tb.date,
     hours: parseFloat(tb.hours),
+    startTime: tb.startTime != null ? parseFloat(tb.startTime) : null,
     type: tb.type,
     title: tb.title,
     description: tb.description,
@@ -63,7 +64,7 @@ router.get("/timeblocks", async (req, res) => {
 });
 
 router.post("/timeblocks", async (req, res) => {
-  const { userId, projectId, phaseId, allocationId, date, hours, type, title, subPhase, description } =
+  const { userId, projectId, phaseId, allocationId, date, hours, startTime, type, title, subPhase, description } =
     req.body;
   if (!projectId || !date || hours === undefined) {
     res.status(400).json({ error: "Missing required fields" });
@@ -79,6 +80,7 @@ router.post("/timeblocks", async (req, res) => {
       allocationId: allocationId || null,
       date,
       hours: String(hours),
+      startTime: startTime != null ? String(startTime) : null,
       type: type || "work",
       title: title || null,
       subPhase: subPhase || null,
@@ -91,12 +93,13 @@ router.post("/timeblocks", async (req, res) => {
 });
 
 router.put("/timeblocks/:id", async (req, res) => {
-  const { date, hours, type, title, subPhase, description, approved, phaseId } = req.body;
+  const { date, hours, startTime, type, title, subPhase, description, approved, phaseId } = req.body;
   const updated = await db
     .update(timeBlocksTable)
     .set({
       date,
       hours: hours !== undefined ? String(hours) : undefined,
+      startTime: startTime !== undefined ? (startTime != null ? String(startTime) : null) : undefined,
       type,
       title,
       subPhase: subPhase ?? undefined,
