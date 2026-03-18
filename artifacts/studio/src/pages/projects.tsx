@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { Plus, FileCheck, DollarSign, Clock, X, GripVertical, Briefcase, RefreshCw } from "lucide-react";
+import { Plus, FileCheck, DollarSign, Clock, X, GripVertical, Briefcase, RefreshCw, UserPlus } from "lucide-react";
 import { useListProjects, useCreateProject, useListClients } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -16,7 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 
-const PROJECT_COLORS = ["#4f46e5","#0ea5e9","#10b981","#f59e0b","#ef4444","#8b5cf6","#ec4899","#14b8a6"];
+const PROJECT_COLORS = ["#4f46e5","#0ea5e9","#10b981","#f59e0b","#ef4444","#8b5cf6","#ec4899","#14b8a6","#f47835","#06b6d4"];
 
 const PHASE_SUGGESTIONS = [
   "Discovery", "Vision", "Brand Identity", "Brand Standards",
@@ -27,6 +27,11 @@ const PHASE_SUGGESTIONS = [
 interface PhaseRow {
   name: string;
   budgetedHours: string;
+}
+
+interface TeamMember {
+  name: string;
+  role: string;
 }
 
 function NTPBadge({ received }: { received: boolean }) {
@@ -73,9 +78,15 @@ function WorkStatusBadge({ status }: { status: string }) {
 const DEFAULT_FORM = {
   name: "", clientId: "", status: "active",
   workStatus: "working_internally",
-  budgetAmount: "10000", color: "#4f46e5",
+  budgetAmount: "10000", color: PROJECT_COLORS[0],
   ntpReceived: false, ntpDate: "", paymentStatus: "unpaid",
 };
+
+function getUniqueColor(usedColors: Set<string>): string {
+  const unused = PROJECT_COLORS.find((c) => !usedColors.has(c));
+  if (unused) return unused;
+  return PROJECT_COLORS[0];
+}
 
 export default function Projects() {
   const { data: projects = [], isLoading } = useListProjects();
@@ -88,6 +99,8 @@ export default function Projects() {
   const [phases, setPhases] = useState<PhaseRow[]>([]);
   const [customPhase, setCustomPhase] = useState("");
   const [filter, setFilter] = useState<string>("all");
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [newMember, setNewMember] = useState({ name: "", role: "designer" });
 
   const set = (key: string, value: any) => setFormData((f) => ({ ...f, [key]: value }));
 
@@ -104,6 +117,34 @@ export default function Projects() {
     setPhases((p) => p.map((ph, i) => (i === idx ? { ...ph, budgetedHours: hours } : ph)));
 
   const totalPhaseHours = phases.reduce((sum, p) => sum + (parseFloat(p.budgetedHours) || 0), 0);
+
+  const addTeamMember = () => {
+    if (!newMember.name.trim()) return;
+    setTeamMembers((prev) => [...prev, { name: newMember.name.trim(), role: newMember.role }]);
+    setNewMember({ name: "", role: "designer" });
+  };
+
+  const removeTeamMember = (idx: number) => setTeamMembers((prev) => prev.filter((_, i) => i !== idx));
+
+  const resetDialog = () => {
+    setPhases([]);
+    setCustomPhase("");
+    setTeamMembers([]);
+    setNewMember({ name: "", role: "designer" });
+  };
+
+  const handleDialogOpen = (open: boolean) => {
+    if (open) {
+      const usedColors = new Set((projects as any[]).map((p: any) => p.color).filter(Boolean));
+      const color = getUniqueColor(usedColors);
+      setFormData({ ...DEFAULT_FORM, color });
+      resetDialog();
+    } else {
+      setFormData({ ...DEFAULT_FORM });
+      resetDialog();
+    }
+    setIsDialogOpen(open);
+  };
 
   const handleCreate = () => {
     if (!formData.name) return;
@@ -123,11 +164,29 @@ export default function Projects() {
         } as any,
       },
       {
-        onSuccess: () => {
-          toast({ title: `Project created with ${phases.length} phase${phases.length !== 1 ? "s" : ""}` });
+        onSuccess: async (data: any) => {
+          const projectId = data?.id;
+          if (projectId && teamMembers.length > 0) {
+            await Promise.all(
+              teamMembers.map((m) =>
+                fetch(`/api/projects/${projectId}/members`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ name: m.name, role: m.role }),
+                })
+              )
+            );
+          }
+          toast({
+            title: `Project created`,
+            description: [
+              phases.length > 0 && `${phases.length} phase${phases.length !== 1 ? "s" : ""}`,
+              teamMembers.length > 0 && `${teamMembers.length} team member${teamMembers.length !== 1 ? "s" : ""}`,
+            ].filter(Boolean).join(" · ") || undefined,
+          });
           setIsDialogOpen(false);
           setFormData({ ...DEFAULT_FORM });
-          setPhases([]);
+          resetDialog();
           queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
         },
         onError: () => toast({ title: "Failed to create project", variant: "destructive" }),
@@ -156,7 +215,7 @@ export default function Projects() {
           <p className="text-muted-foreground mt-1">Manage all active and past studio projects.</p>
         </div>
 
-        <Dialog open={isDialogOpen} onOpenChange={(open) => { setIsDialogOpen(open); if (!open) { setPhases([]); setFormData({ ...DEFAULT_FORM }); } }}>
+        <Dialog open={isDialogOpen} onOpenChange={handleDialogOpen}>
           <DialogTrigger asChild>
             <Button><Plus className="mr-2 h-4 w-4" />New Project</Button>
           </DialogTrigger>
@@ -204,11 +263,17 @@ export default function Projects() {
                   <div className="grid gap-2">
                     <Label>Color</Label>
                     <div className="flex gap-2 flex-wrap mt-1">
-                      {PROJECT_COLORS.map((c) => (
-                        <button key={c}
-                          className={`w-6 h-6 rounded-full border-2 transition-all ${formData.color === c ? "border-white scale-110" : "border-transparent"}`}
-                          style={{ backgroundColor: c }} onClick={() => set("color", c)} />
-                      ))}
+                      {PROJECT_COLORS.map((c) => {
+                        const isUsed = (projects as any[]).some((p: any) => p.color === c);
+                        return (
+                          <button key={c}
+                            className={`w-6 h-6 rounded-full border-2 transition-all ${formData.color === c ? "border-white scale-110" : "border-transparent"} ${isUsed && formData.color !== c ? "opacity-40" : ""}`}
+                            style={{ backgroundColor: c }}
+                            onClick={() => set("color", c)}
+                            title={isUsed ? "Already in use by another project" : undefined}
+                          />
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
@@ -220,10 +285,14 @@ export default function Projects() {
                   <div>
                     <Label className="text-base">Phases & Scope</Label>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Define which phases are in scope. Each phase has its own hour budget.
-                      {totalPhaseHours > 0 && <span className="text-foreground font-medium"> Total: {totalPhaseHours}h</span>}
+                      Define which phases are in scope and their hour budgets.
                     </p>
                   </div>
+                  {totalPhaseHours > 0 && (
+                    <span className="text-sm font-semibold text-foreground bg-muted/50 px-3 py-1 rounded-md">
+                      {totalPhaseHours}h total
+                    </span>
+                  )}
                 </div>
 
                 {/* Suggestions */}
@@ -259,6 +328,12 @@ export default function Projects() {
                         </button>
                       </div>
                     ))}
+
+                    {/* Running total below phase list */}
+                    <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-primary/5 border border-primary/10">
+                      <span className="text-sm text-muted-foreground">Total scoped</span>
+                      <span className="text-sm font-bold text-foreground">{totalPhaseHours}h</span>
+                    </div>
                   </div>
                 )}
 
@@ -310,12 +385,72 @@ export default function Projects() {
                   </Select>
                 </div>
               </div>
+
+              {/* Team */}
+              <div className="border-t pt-4 grid gap-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-base">Team</Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">Assign team members to this project.</p>
+                  </div>
+                </div>
+
+                {/* Added members */}
+                {teamMembers.length > 0 && (
+                  <div className="flex flex-col gap-2">
+                    {teamMembers.map((m, idx) => (
+                      <div key={idx} className="flex items-center gap-2 bg-muted/30 rounded-lg px-3 py-2">
+                        <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold text-primary shrink-0">
+                          {m.name.charAt(0).toUpperCase()}
+                        </div>
+                        <span className="flex-1 text-sm font-medium">{m.name}</span>
+                        <Badge variant="outline" className={`text-[10px] px-1.5 shrink-0 ${m.role === "lead" ? "border-primary/40 text-primary bg-primary/10" : "border-border text-muted-foreground"}`}>
+                          {m.role === "lead" ? "Project Lead" : "Designer"}
+                        </Badge>
+                        <button onClick={() => removeTeamMember(idx)} className="text-muted-foreground hover:text-destructive ml-1">
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Add member form */}
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Team member name…"
+                    value={newMember.name}
+                    onChange={(e) => setNewMember((m) => ({ ...m, name: e.target.value }))}
+                    onKeyDown={(e) => { if (e.key === "Enter") addTeamMember(); }}
+                    className="flex-1"
+                  />
+                  <Select value={newMember.role} onValueChange={(v) => setNewMember((m) => ({ ...m, role: v }))}>
+                    <SelectTrigger className="w-36">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="designer">Designer</SelectItem>
+                      <SelectItem value="lead">Project Lead</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button variant="outline" size="sm" onClick={addTeamMember} disabled={!newMember.name.trim()}>
+                    <UserPlus className="h-4 w-4" />
+                  </Button>
+                </div>
+                {teamMembers.length === 0 && (
+                  <p className="text-xs text-muted-foreground italic">No team members added yet.</p>
+                )}
+              </div>
             </div>
 
             <DialogFooter>
-              <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
+              <Button variant="outline" onClick={() => handleDialogOpen(false)}>Cancel</Button>
               <Button onClick={handleCreate} disabled={createProject.isPending || !formData.name}>
-                {createProject.isPending ? "Creating…" : `Create Project${phases.length > 0 ? ` with ${phases.length} phase${phases.length !== 1 ? "s" : ""}` : ""}`}
+                {createProject.isPending ? "Creating…" : [
+                  "Create Project",
+                  phases.length > 0 && `· ${phases.length} phase${phases.length !== 1 ? "s" : ""}`,
+                  teamMembers.length > 0 && `· ${teamMembers.length} member${teamMembers.length !== 1 ? "s" : ""}`,
+                ].filter(Boolean).join(" ")}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -340,7 +475,7 @@ export default function Projects() {
       ) : filtered.length === 0 ? (
         <div className="text-center py-24 flex flex-col items-center gap-4">
           <div className="text-muted-foreground text-lg">No projects found</div>
-          <Button onClick={() => setIsDialogOpen(true)}><Plus className="mr-2 h-4 w-4" />Create First Project</Button>
+          <Button onClick={() => handleDialogOpen(true)}><Plus className="mr-2 h-4 w-4" />Create First Project</Button>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
