@@ -73,8 +73,8 @@ export default function Calendar() {
   const [modal, setModal] = useState<ModalState>({ open: false, day: null, startHour: 9, hours: 1 });
   const [form, setForm] = useState({ projectId: "", phaseId: "", subPhase: "", description: "" });
   const [panelOpen, setPanelOpen] = useState(true);
-  const [breakModal, setBreakModal] = useState<{ open: boolean; day: Date | null; startHour: number; hours: number }>({
-    open: false, day: null, startHour: 12, hours: 0.5,
+  const [breakModal, setBreakModal] = useState<{ open: boolean; day: Date | null; startHour: number; hours: number; anchorX: number; anchorY: number }>({
+    open: false, day: null, startHour: 12, hours: 0.5, anchorX: 0, anchorY: 0,
   });
   const [breakForm, setBreakForm] = useState({ label: "Lunch", hours: "0.5" });
   const isDragging = useRef(false);
@@ -229,10 +229,11 @@ export default function Calendar() {
     e.preventDefault();
     e.stopPropagation();
     const isAlt = e.altKey;
-    const blockStartSlot = hoursToSlot(tb.startTime ?? 0);
 
     const col = (e.currentTarget as HTMLElement).closest("[data-day-col]") as Element;
-    const slot = col ? getSlotFromClientY(e.clientY, col) : blockStartSlot;
+    const slot = col
+      ? getSlotFromClientY(e.clientY, col)
+      : (tb.startTime != null ? hoursToSlot(tb.startTime) : hoursToSlot(9));
 
     isBlockDragging.current = true;
     setBlockDrag({
@@ -338,7 +339,7 @@ export default function Calendar() {
     const startHour = slotToHours(slot);
 
     if (dragType === "break") {
-      setBreakModal({ open: true, day, startHour, hours: 0.5 });
+      setBreakModal({ open: true, day, startHour, hours: 0.5, anchorX: e.clientX, anchorY: e.clientY });
       setBreakForm({ label: "Lunch", hours: "0.5" });
       return;
     }
@@ -631,10 +632,16 @@ export default function Calendar() {
                             key={tb.id}
                             data-block
                             className="absolute left-0.5 right-0.5 rounded-md p-1.5 text-xs shadow-sm group cursor-grab active:cursor-grabbing z-20 overflow-hidden"
-                            style={{
+                            style={isInternal ? {
                               top: topOffset,
                               height: blockHeightPx,
-                              backgroundColor: isInternal ? "#16a34a18" : `${color}22`,
+                              backgroundColor: "#16a34a14",
+                              border: "1px solid #16a34a55",
+                              boxShadow: "inset 2px 0 0 #16a34a88",
+                            } : {
+                              top: topOffset,
+                              height: blockHeightPx,
+                              backgroundColor: `${color}22`,
                               borderLeft: `3px solid ${color}`,
                             }}
                             onMouseDown={(e) => handleBlockMouseDown(e, tb)}
@@ -805,39 +812,49 @@ export default function Calendar() {
         </div>
       )}
 
-      {breakModal.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-card border rounded-xl shadow-2xl w-full max-w-sm p-6 flex flex-col gap-4">
-            <div className="flex items-center justify-between">
+      {breakModal.open && (() => {
+        const popW = 240;
+        const popH = 230;
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        const rawX = breakModal.anchorX + 12;
+        const rawY = breakModal.anchorY - 16;
+        const popX = rawX + popW > vw ? breakModal.anchorX - popW - 8 : rawX;
+        const popY = rawY + popH > vh ? vh - popH - 12 : Math.max(8, rawY);
+        const closeBreak = () => setBreakModal({ open: false, day: null, startHour: 12, hours: 0.5, anchorX: 0, anchorY: 0 });
+        return (
+          <>
+            <div className="fixed inset-0 z-40" onClick={closeBreak} />
+            <div
+              className="fixed z-50 bg-card border rounded-xl shadow-2xl p-4 flex flex-col gap-3"
+              style={{ left: popX, top: popY, width: popW }}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <Coffee className="h-4 w-4 text-gray-400" />
+                  <span className="font-semibold text-sm">Add Break</span>
+                </div>
+                <button onClick={closeBreak} className="text-muted-foreground hover:text-foreground">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              {breakModal.day && (
+                <p className="text-xs text-muted-foreground -mt-1">
+                  {format(breakModal.day, "EEE, MMM d")} · {formatSlotTime(hoursToSlot(breakModal.startHour))}
+                </p>
+              )}
+              <Select value={breakForm.label} onValueChange={(v) => setBreakForm({ ...breakForm, label: v })}>
+                <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Lunch">Lunch</SelectItem>
+                  <SelectItem value="Break">Break</SelectItem>
+                  <SelectItem value="Personal">Personal</SelectItem>
+                  <SelectItem value="Dr. Appointment">Dr. Appointment</SelectItem>
+                  <SelectItem value="Other">Other</SelectItem>
+                </SelectContent>
+              </Select>
               <div className="flex items-center gap-2">
-                <Coffee className="h-5 w-5 text-gray-400" />
-                <h2 className="text-lg font-bold">Add Break</h2>
-              </div>
-              <button onClick={() => setBreakModal({ open: false, day: null, startHour: 12, hours: 0.5 })} className="text-muted-foreground hover:text-foreground">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            {breakModal.day && (
-              <p className="text-sm text-muted-foreground -mt-2">
-                {format(breakModal.day, "EEEE, MMMM d")} · {formatSlotTime(hoursToSlot(breakModal.startHour))}
-              </p>
-            )}
-            <div className="grid gap-3">
-              <div className="grid gap-2">
-                <Label>Label</Label>
-                <Select value={breakForm.label} onValueChange={(v) => setBreakForm({ ...breakForm, label: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Lunch">Lunch</SelectItem>
-                    <SelectItem value="Break">Break</SelectItem>
-                    <SelectItem value="Personal">Personal</SelectItem>
-                    <SelectItem value="Dr. Appointment">Dr. Appointment</SelectItem>
-                    <SelectItem value="Other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid gap-2">
-                <Label>Duration (hours)</Label>
+                <Label className="text-xs shrink-0">Duration (h)</Label>
                 <Input
                   type="number"
                   min={0.25}
@@ -845,20 +862,19 @@ export default function Calendar() {
                   step={0.25}
                   value={breakForm.hours}
                   onChange={(e) => setBreakForm({ ...breakForm, hours: e.target.value })}
+                  className="h-8 text-xs"
                 />
               </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" size="sm" onClick={closeBreak}>Cancel</Button>
+                <Button size="sm" onClick={handleBreakSave} disabled={createBreakBlock.isPending}>
+                  {createBreakBlock.isPending ? "…" : "Add"}
+                </Button>
+              </div>
             </div>
-            <div className="flex justify-end gap-3 pt-1">
-              <Button variant="outline" onClick={() => setBreakModal({ open: false, day: null, startHour: 12, hours: 0.5 })}>
-                Cancel
-              </Button>
-              <Button onClick={handleBreakSave} disabled={createBreakBlock.isPending}>
-                {createBreakBlock.isPending ? "Saving…" : "Add Break"}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+          </>
+        );
+      })()}
     </div>
   );
 }
