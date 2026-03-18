@@ -95,7 +95,7 @@
 
   --sidebar-border: 215 25% 20%;
 
-  --sidebar-primary: 243 75% 59%;
+  --sidebar-primary: 21 90% 58%;
 
   --sidebar-primary-foreground: 0 0% 98%;
 
@@ -111,7 +111,7 @@
 
   --popover-border: 215 25% 27%;
 
-  --primary: 243 75% 59%;
+  --primary: 21 90% 58%;
 
   --primary-foreground: 0 0% 98%;
 
@@ -133,7 +133,7 @@
 
   /* Used as the border around inputs. Dark mode: Should be a border that is light enough to have high contrast when rendered on a --card background. More contrast than standard --border */
   --input: 215 25% 35%;
-  --ring: 243 75% 59%;
+  --ring: 21 90% 58%;
   --chart-1: 220 70% 50%;
   --chart-2: 160 60% 45%;
   --chart-3: 30 80% 55%;

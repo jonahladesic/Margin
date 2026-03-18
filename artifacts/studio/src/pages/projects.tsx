@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { Plus, FileCheck, DollarSign, Clock, X, GripVertical } from "lucide-react";
+import { Plus, FileCheck, DollarSign, Clock, X, GripVertical, Briefcase, RefreshCw } from "lucide-react";
 import { useListProjects, useCreateProject, useListClients } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -23,8 +23,6 @@ const PHASE_SUGGESTIONS = [
   "City Submittal", "Schematic Design", "Design Development",
   "Construction Documents", "Permitting", "Bidding", "Construction Administration",
 ];
-
-const SUB_PHASES = ["Project", "Design", "Meetings", "Internal Meetings"];
 
 interface PhaseRow {
   name: string;
@@ -57,8 +55,24 @@ function PaymentBadge({ status }: { status: string }) {
   );
 }
 
+function WorkStatusBadge({ status }: { status: string }) {
+  if (status === "awaiting_client") {
+    return (
+      <Badge variant="outline" className="gap-1 bg-purple-500/10 text-purple-400 border-purple-500/20 text-[10px] px-1.5">
+        <RefreshCw className="h-3 w-3" /> Awaiting Client
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="gap-1 bg-sky-500/10 text-sky-400 border-sky-500/20 text-[10px] px-1.5">
+      <Briefcase className="h-3 w-3" /> Working Internally
+    </Badge>
+  );
+}
+
 const DEFAULT_FORM = {
-  name: "", clientId: "", status: "active", type: "branding",
+  name: "", clientId: "", status: "active",
+  workStatus: "working_internally",
   budgetAmount: "10000", color: "#4f46e5",
   ntpReceived: false, ntpDate: "", paymentStatus: "unpaid",
 };
@@ -99,7 +113,7 @@ export default function Projects() {
           name: formData.name,
           clientId: formData.clientId || undefined,
           status: formData.status as any,
-          type: formData.type as any,
+          workStatus: formData.workStatus as any,
           budgetAmount: Number(formData.budgetAmount),
           color: formData.color,
           ntpReceived: formData.ntpReceived,
@@ -172,21 +186,20 @@ export default function Projects() {
                     </Select>
                   </div>
                   <div className="grid gap-2">
-                    <Label>Type</Label>
-                    <Select value={formData.type} onValueChange={(v) => set("type", v)}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {["branding","web","interior","architecture","other"].map((t) => (
-                          <SelectItem key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label>Budget ($)</Label>
+                    <Input type="number" value={formData.budgetAmount} onChange={(e) => set("budgetAmount", e.target.value)} />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="grid gap-2">
-                    <Label>Budget ($)</Label>
-                    <Input type="number" value={formData.budgetAmount} onChange={(e) => set("budgetAmount", e.target.value)} />
+                    <Label>Work Status</Label>
+                    <Select value={formData.workStatus} onValueChange={(v) => set("workStatus", v)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="working_internally">Working Internally</SelectItem>
+                        <SelectItem value="awaiting_client">Awaiting Client Feedback</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="grid gap-2">
                     <Label>Color</Label>
@@ -352,6 +365,7 @@ export default function Projects() {
                     <div className="flex flex-wrap gap-1.5">
                       <NTPBadge received={project.ntpReceived} />
                       <PaymentBadge status={project.paymentStatus} />
+                      <WorkStatusBadge status={project.workStatus || "working_internally"} />
                     </div>
 
                     <div className="flex-1" />
@@ -371,10 +385,9 @@ export default function Projects() {
                     )}
 
                     <div className="flex justify-between items-center text-xs text-muted-foreground border-t border-border pt-2">
-                      <span className="uppercase">{project.type}</span>
-                      {project.budgetAmount && (
-                        <span className="font-medium text-foreground">${Number(project.budgetAmount).toLocaleString()}</span>
-                      )}
+                      <span className="text-xs text-muted-foreground">
+                        {project.budgetAmount ? `$${Number(project.budgetAmount).toLocaleString()} budget` : "No budget set"}
+                      </span>
                     </div>
                   </div>
                 </Card>

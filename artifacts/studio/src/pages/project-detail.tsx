@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import {
   ChevronLeft, FileCheck, DollarSign, Clock, Plus, Check, X,
   ChevronDown, ChevronRight as ChevronRightIcon, Pencil, Trash2,
+  Users, Briefcase, RefreshCw, UserCircle,
 } from "lucide-react";
 import {
   useGetProject, useListTimeBlocks, useListExpenses, useListInvoices,
@@ -32,6 +33,8 @@ const PHASE_SUGGESTIONS = [
   "Construction Documents", "Permitting", "Bidding", "Construction Administration",
 ];
 
+type ViewRole = "lead" | "designer";
+
 function NTPBadge({ received }: { received: boolean }) {
   return received ? (
     <Badge variant="outline" className="gap-1.5 bg-emerald-500/10 text-emerald-500 border-emerald-500/20">
@@ -58,18 +61,35 @@ function PaymentBadge({ status }: { status: string }) {
   );
 }
 
+function WorkStatusBadge({ status }: { status: string }) {
+  if (status === "awaiting_client") {
+    return (
+      <Badge variant="outline" className="gap-1.5 bg-purple-500/10 text-purple-400 border-purple-500/20">
+        <RefreshCw className="h-3.5 w-3.5" /> Awaiting Client Feedback
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="gap-1.5 bg-sky-500/10 text-sky-400 border-sky-500/20">
+      <Briefcase className="h-3.5 w-3.5" /> Working Internally
+    </Badge>
+  );
+}
+
 function PhaseCard({
   phase,
   timeblocks,
   onToggleEnabled,
   onUpdateHours,
   onDelete,
+  hideFinancials,
 }: {
   phase: any;
   timeblocks: any[];
   onToggleEnabled: (id: string, enabled: boolean) => void;
   onUpdateHours: (id: string, hours: number) => void;
   onDelete: (id: string) => void;
+  hideFinancials: boolean;
 }) {
   const [expanded, setExpanded] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -118,45 +138,49 @@ function PhaseCard({
         </div>
 
         <div className="flex items-center gap-4 shrink-0">
-          {/* Logged */}
-          <div className="text-right hidden sm:block">
-            <div className="text-xs text-muted-foreground">Logged</div>
-            <div className={`text-sm font-semibold ${isOver ? "text-destructive" : ""}`}>{loggedHours}h</div>
-          </div>
-
-          {/* Budget (editable) */}
-          <div className="text-right">
-            <div className="text-xs text-muted-foreground">Budgeted</div>
-            {editing ? (
-              <div className="flex items-center gap-1">
-                <Input
-                  type="number" min="0" value={hoursInput}
-                  onChange={(e) => setHoursInput(e.target.value)}
-                  onBlur={handleSaveHours}
-                  onKeyDown={(e) => { if (e.key === "Enter") handleSaveHours(); if (e.key === "Escape") setEditing(false); }}
-                  className="w-20 h-6 text-sm text-right p-1"
-                  autoFocus
-                />
-                <span className="text-xs text-muted-foreground">h</span>
+          {!hideFinancials && (
+            <>
+              {/* Logged */}
+              <div className="text-right hidden sm:block">
+                <div className="text-xs text-muted-foreground">Logged</div>
+                <div className={`text-sm font-semibold ${isOver ? "text-destructive" : ""}`}>{loggedHours}h</div>
               </div>
-            ) : (
-              <button
-                onClick={() => { setHoursInput(String(phase.budgetedHours)); setEditing(true); }}
-                className="flex items-center gap-1 text-sm font-semibold hover:text-primary group"
-              >
-                {phase.budgetedHours}h
-                <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-60 transition-opacity" />
-              </button>
-            )}
-          </div>
 
-          {/* Remaining */}
-          <div className={`text-right hidden sm:block ${isOver ? "text-destructive" : "text-muted-foreground"}`}>
-            <div className="text-xs">Remaining</div>
-            <div className="text-sm font-medium">
-              {isOver ? `-${Math.abs(remaining).toFixed(1)}h` : `${remaining.toFixed(1)}h`}
-            </div>
-          </div>
+              {/* Budget (editable) */}
+              <div className="text-right">
+                <div className="text-xs text-muted-foreground">Budgeted</div>
+                {editing ? (
+                  <div className="flex items-center gap-1">
+                    <Input
+                      type="number" min="0" value={hoursInput}
+                      onChange={(e) => setHoursInput(e.target.value)}
+                      onBlur={handleSaveHours}
+                      onKeyDown={(e) => { if (e.key === "Enter") handleSaveHours(); if (e.key === "Escape") setEditing(false); }}
+                      className="w-20 h-6 text-sm text-right p-1"
+                      autoFocus
+                    />
+                    <span className="text-xs text-muted-foreground">h</span>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => { setHoursInput(String(phase.budgetedHours)); setEditing(true); }}
+                    className="flex items-center gap-1 text-sm font-semibold hover:text-primary group"
+                  >
+                    {phase.budgetedHours}h
+                    <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-60 transition-opacity" />
+                  </button>
+                )}
+              </div>
+
+              {/* Remaining */}
+              <div className={`text-right hidden sm:block ${isOver ? "text-destructive" : "text-muted-foreground"}`}>
+                <div className="text-xs">Remaining</div>
+                <div className="text-sm font-medium">
+                  {isOver ? `-${Math.abs(remaining).toFixed(1)}h` : `${remaining.toFixed(1)}h`}
+                </div>
+              </div>
+            </>
+          )}
 
           {/* Enabled toggle */}
           <div className="flex flex-col items-center gap-0.5">
@@ -167,18 +191,20 @@ function PhaseCard({
             />
           </div>
 
-          {/* Delete */}
-          <button
-            onClick={() => onDelete(phase.id)}
-            className="text-muted-foreground hover:text-destructive transition-colors"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
+          {!hideFinancials && (
+            /* Delete */
+            <button
+              onClick={() => onDelete(phase.id)}
+              className="text-muted-foreground hover:text-destructive transition-colors"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          )}
         </div>
       </div>
 
       {/* Progress */}
-      {!isDisabled && phase.budgetedHours > 0 && (
+      {!isDisabled && phase.budgetedHours > 0 && !hideFinancials && (
         <div className="px-4 pb-1">
           <Progress
             value={Math.min(pct, 100)}
@@ -209,6 +235,8 @@ export default function ProjectDetail() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  const [viewRole, setViewRole] = useState<ViewRole>("lead");
+
   const { data: project, isLoading: projectLoading } = useGetProject(id || "");
   const { data: timeblocks = [] } = useListTimeBlocks({ request: { query: { projectId: id } } });
   const { data: expenses = [] } = useListExpenses({ request: { query: { projectId: id } } });
@@ -223,13 +251,25 @@ export default function ProjectDetail() {
     enabled: !!id,
   });
 
+  const { data: members = [], refetch: refetchMembers } = useQuery({
+    queryKey: ["/api/projects", id, "members"],
+    queryFn: async () => {
+      const r = await fetch(`/api/projects/${id}/members`);
+      return r.json();
+    },
+    enabled: !!id,
+  });
+
   const updateTimeBlock = useUpdateTimeBlock();
   const updateProject = useUpdateProject();
 
-  // Add phase state
   const [newPhaseName, setNewPhaseName] = useState("");
   const [newPhaseHours, setNewPhaseHours] = useState("0");
   const [showAddPhase, setShowAddPhase] = useState(false);
+
+  const [newMemberName, setNewMemberName] = useState("");
+  const [newMemberRole, setNewMemberRole] = useState<"lead" | "designer">("designer");
+  const [showAddMember, setShowAddMember] = useState(false);
 
   const addPhaseMutation = useMutation({
     mutationFn: async (data: { name: string; budgetedHours: number }) => {
@@ -280,6 +320,36 @@ export default function ProjectDetail() {
     },
   });
 
+  const addMemberMutation = useMutation({
+    mutationFn: async (data: { name: string; role: string }) => {
+      const r = await fetch(`/api/projects/${id}/members`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!r.ok) throw new Error("Failed");
+      return r.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Team member added" });
+      setNewMemberName("");
+      setNewMemberRole("designer");
+      setShowAddMember(false);
+      refetchMembers();
+    },
+  });
+
+  const deleteMemberMutation = useMutation({
+    mutationFn: async (memberId: string) => {
+      const r = await fetch(`/api/projects/${id}/members/${memberId}`, { method: "DELETE" });
+      if (!r.ok) throw new Error("Failed");
+    },
+    onSuccess: () => {
+      toast({ title: "Team member removed" });
+      refetchMembers();
+    },
+  });
+
   const handleApproveTime = (tbId: string, approved: boolean) => {
     updateTimeBlock.mutate({ id: tbId, data: { approved } as any }, {
       onSuccess: () => {
@@ -309,6 +379,16 @@ export default function ProjectDetail() {
     });
   };
 
+  const handleWorkStatus = (workStatus: string) => {
+    if (!project) return;
+    updateProject.mutate({ id: project.id, data: { workStatus } as any }, {
+      onSuccess: () => {
+        toast({ title: "Work status updated" });
+        queryClient.invalidateQueries({ queryKey: ["/api/projects", id] });
+      },
+    });
+  };
+
   if (projectLoading) return <div className="p-8 text-muted-foreground">Loading project…</div>;
   if (!project) return <div className="p-8 text-destructive">Project not found</div>;
 
@@ -321,6 +401,7 @@ export default function ProjectDetail() {
   const isOverBudget = totalRemaining < 0;
 
   const usedSuggestions = new Set(sortedPhases.map((p: any) => p.name.toLowerCase()));
+  const isDesigner = viewRole === "designer";
 
   return (
     <div className="p-6 max-w-5xl mx-auto flex flex-col gap-6">
@@ -339,48 +420,69 @@ export default function ProjectDetail() {
             <h1 className="text-2xl font-bold tracking-tight">{project.name}</h1>
             <Badge variant="outline" className="uppercase">{project.status?.replace("_", " ")}</Badge>
           </div>
-          <div className="flex gap-2 flex-wrap">
-            <NTPBadge received={(project as any).ntpReceived} />
-            <PaymentBadge status={(project as any).paymentStatus} />
+          {/* View as role selector */}
+          <div className="flex items-center gap-2 border border-border rounded-md px-3 py-1.5 bg-muted/10">
+            <UserCircle className="h-4 w-4 text-muted-foreground" />
+            <span className="text-xs text-muted-foreground">View as:</span>
+            <button
+              onClick={() => setViewRole("lead")}
+              className={`text-xs px-2 py-0.5 rounded transition-colors ${viewRole === "lead" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              Project Lead
+            </button>
+            <button
+              onClick={() => setViewRole("designer")}
+              className={`text-xs px-2 py-0.5 rounded transition-colors ${viewRole === "designer" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              Designer
+            </button>
           </div>
         </div>
-        <p className="text-muted-foreground">{(project as any).clientName || "Internal Project"}</p>
+        <div className="flex gap-2 flex-wrap items-center">
+          <p className="text-muted-foreground">{(project as any).clientName || "Internal Project"}</p>
+          <WorkStatusBadge status={(project as any).workStatus || "working_internally"} />
+          {!isDesigner && <NTPBadge received={(project as any).ntpReceived} />}
+          {!isDesigner && <PaymentBadge status={(project as any).paymentStatus} />}
+        </div>
       </div>
 
-      {/* Summary stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Card className="p-4">
-          <div className="text-xs text-muted-foreground uppercase tracking-wide">Total Budgeted</div>
-          <div className="text-2xl font-bold mt-1">{totalBudgeted}<span className="text-sm font-normal text-muted-foreground">h</span></div>
-          <div className="text-xs text-muted-foreground mt-1">{enabledPhases.length} active phase{enabledPhases.length !== 1 ? "s" : ""}</div>
-        </Card>
-        <Card className="p-4">
-          <div className="text-xs text-muted-foreground uppercase tracking-wide">Logged</div>
-          <div className="text-2xl font-bold mt-1">{totalLogged}<span className="text-sm font-normal text-muted-foreground">h</span></div>
-          <Progress value={Math.min(totalPct, 100)} className="h-1 mt-2" />
-        </Card>
-        <Card className={`p-4 ${isOverBudget ? "border-destructive/40" : ""}`}>
-          <div className="text-xs text-muted-foreground uppercase tracking-wide">{isOverBudget ? "Over Budget" : "Remaining"}</div>
-          <div className={`text-2xl font-bold mt-1 ${isOverBudget ? "text-destructive" : "text-emerald-500"}`}>
-            {isOverBudget ? "-" : ""}{Math.abs(totalRemaining).toFixed(1)}<span className="text-sm font-normal text-muted-foreground">h</span>
-          </div>
-          <div className="text-xs text-muted-foreground mt-1">{Math.round(totalPct)}% utilized</div>
-        </Card>
-        <Card className="p-4">
-          <div className="text-xs text-muted-foreground uppercase tracking-wide">Budget</div>
-          <div className="text-2xl font-bold mt-1">
-            {project.budgetAmount ? `$${Number(project.budgetAmount).toLocaleString()}` : "—"}
-          </div>
-        </Card>
-      </div>
+      {/* Summary stats — hidden for Designer role */}
+      {!isDesigner && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <Card className="p-4">
+            <div className="text-xs text-muted-foreground uppercase tracking-wide">Total Budgeted</div>
+            <div className="text-2xl font-bold mt-1">{totalBudgeted}<span className="text-sm font-normal text-muted-foreground">h</span></div>
+            <div className="text-xs text-muted-foreground mt-1">{enabledPhases.length} active phase{enabledPhases.length !== 1 ? "s" : ""}</div>
+          </Card>
+          <Card className="p-4">
+            <div className="text-xs text-muted-foreground uppercase tracking-wide">Logged</div>
+            <div className="text-2xl font-bold mt-1">{totalLogged}<span className="text-sm font-normal text-muted-foreground">h</span></div>
+            <Progress value={Math.min(totalPct, 100)} className="h-1 mt-2" />
+          </Card>
+          <Card className={`p-4 ${isOverBudget ? "border-destructive/40" : ""}`}>
+            <div className="text-xs text-muted-foreground uppercase tracking-wide">{isOverBudget ? "Over Budget" : "Remaining"}</div>
+            <div className={`text-2xl font-bold mt-1 ${isOverBudget ? "text-destructive" : "text-emerald-500"}`}>
+              {isOverBudget ? "-" : ""}{Math.abs(totalRemaining).toFixed(1)}<span className="text-sm font-normal text-muted-foreground">h</span>
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">{Math.round(totalPct)}% utilized</div>
+          </Card>
+          <Card className="p-4">
+            <div className="text-xs text-muted-foreground uppercase tracking-wide">Budget</div>
+            <div className="text-2xl font-bold mt-1">
+              {project.budgetAmount ? `$${Number(project.budgetAmount).toLocaleString()}` : "—"}
+            </div>
+          </Card>
+        </div>
+      )}
 
       <Tabs defaultValue="phases" className="w-full">
         <TabsList className="bg-muted/20">
           <TabsTrigger value="phases">Phases</TabsTrigger>
           <TabsTrigger value="time">Time Logs</TabsTrigger>
-          <TabsTrigger value="expenses">Expenses</TabsTrigger>
-          <TabsTrigger value="invoices">Invoices</TabsTrigger>
-          <TabsTrigger value="settings">Settings</TabsTrigger>
+          {!isDesigner && <TabsTrigger value="expenses">Expenses</TabsTrigger>}
+          {!isDesigner && <TabsTrigger value="invoices">Invoices</TabsTrigger>}
+          {!isDesigner && <TabsTrigger value="team">Team</TabsTrigger>}
+          {!isDesigner && <TabsTrigger value="settings">Settings</TabsTrigger>}
         </TabsList>
 
         {/* PHASES TAB */}
@@ -389,32 +491,36 @@ export default function ProjectDetail() {
             {sortedPhases.length === 0 ? (
               <Card className="p-8 text-center">
                 <p className="text-muted-foreground mb-4">No phases defined for this project yet.</p>
-                <Button onClick={() => setShowAddPhase(true)}>
-                  <Plus className="mr-2 h-4 w-4" /> Add First Phase
-                </Button>
+                {!isDesigner && (
+                  <Button onClick={() => setShowAddPhase(true)}>
+                    <Plus className="mr-2 h-4 w-4" /> Add First Phase
+                  </Button>
+                )}
               </Card>
             ) : (
               <>
-                {/* Phase suggestion chips */}
-                <div className="flex flex-wrap gap-1.5">
-                  {PHASE_SUGGESTIONS.filter((s) => !usedSuggestions.has(s.toLowerCase())).slice(0, 6).map((s) => (
-                    <button key={s}
-                      onClick={() => addPhaseMutation.mutate({ name: s, budgetedHours: 0 })}
-                      className="text-xs px-2.5 py-1 rounded-full border border-border text-muted-foreground hover:text-foreground hover:border-primary/50 hover:bg-primary/5 transition-colors">
-                      + {s}
-                    </button>
-                  ))}
-                </div>
+                {/* Phase suggestion chips — Lead only */}
+                {!isDesigner && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {PHASE_SUGGESTIONS.filter((s) => !usedSuggestions.has(s.toLowerCase())).slice(0, 6).map((s) => (
+                      <button key={s}
+                        onClick={() => addPhaseMutation.mutate({ name: s, budgetedHours: 0 })}
+                        className="text-xs px-2.5 py-1 rounded-full border border-border text-muted-foreground hover:text-foreground hover:border-primary/50 hover:bg-primary/5 transition-colors">
+                        + {s}
+                      </button>
+                    ))}
+                  </div>
+                )}
 
                 {sortedPhases.map((phase: any) => (
                   <PhaseCard
                     key={phase.id}
                     phase={phase}
                     timeblocks={timeblocks as any[]}
+                    hideFinancials={isDesigner}
                     onToggleEnabled={(phId, enabled) => updatePhaseMutation.mutate({ id: phId, enabled })}
                     onUpdateHours={(phId, budgetedHours) => {
                       updatePhaseMutation.mutate({ id: phId, budgetedHours });
-                      // Recalculate project total
                       const newTotal = sortedPhases.reduce((sum: number, p: any) =>
                         sum + (p.id === phId ? budgetedHours : p.budgetedHours), 0);
                       updateProject.mutate({ id: project.id, data: { budgetedHours: newTotal } as any });
@@ -425,46 +531,48 @@ export default function ProjectDetail() {
               </>
             )}
 
-            {/* Add phase */}
-            {showAddPhase ? (
-              <Card className="p-4">
-                <div className="flex items-end gap-3">
-                  <div className="flex-1 grid gap-2">
-                    <Label>Phase Name</Label>
-                    <Input
-                      placeholder="e.g. Brand Standards"
-                      value={newPhaseName}
-                      onChange={(e) => setNewPhaseName(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && newPhaseName.trim())
-                          addPhaseMutation.mutate({ name: newPhaseName.trim(), budgetedHours: parseFloat(newPhaseHours) || 0 });
+            {/* Add phase — Lead only */}
+            {!isDesigner && (
+              showAddPhase ? (
+                <Card className="p-4">
+                  <div className="flex items-end gap-3">
+                    <div className="flex-1 grid gap-2">
+                      <Label>Phase Name</Label>
+                      <Input
+                        placeholder="e.g. Brand Standards"
+                        value={newPhaseName}
+                        onChange={(e) => setNewPhaseName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && newPhaseName.trim())
+                            addPhaseMutation.mutate({ name: newPhaseName.trim(), budgetedHours: parseFloat(newPhaseHours) || 0 });
+                        }}
+                        autoFocus
+                      />
+                    </div>
+                    <div className="w-28 grid gap-2">
+                      <Label>Hours Budget</Label>
+                      <Input
+                        type="number" min="0" value={newPhaseHours}
+                        onChange={(e) => setNewPhaseHours(e.target.value)}
+                      />
+                    </div>
+                    <Button
+                      onClick={() => {
+                        if (!newPhaseName.trim()) return;
+                        addPhaseMutation.mutate({ name: newPhaseName.trim(), budgetedHours: parseFloat(newPhaseHours) || 0 });
                       }}
-                      autoFocus
-                    />
+                      disabled={!newPhaseName.trim() || addPhaseMutation.isPending}
+                    >
+                      Add
+                    </Button>
+                    <Button variant="ghost" onClick={() => setShowAddPhase(false)}>Cancel</Button>
                   </div>
-                  <div className="w-28 grid gap-2">
-                    <Label>Hours Budget</Label>
-                    <Input
-                      type="number" min="0" value={newPhaseHours}
-                      onChange={(e) => setNewPhaseHours(e.target.value)}
-                    />
-                  </div>
-                  <Button
-                    onClick={() => {
-                      if (!newPhaseName.trim()) return;
-                      addPhaseMutation.mutate({ name: newPhaseName.trim(), budgetedHours: parseFloat(newPhaseHours) || 0 });
-                    }}
-                    disabled={!newPhaseName.trim() || addPhaseMutation.isPending}
-                  >
-                    Add
-                  </Button>
-                  <Button variant="ghost" onClick={() => setShowAddPhase(false)}>Cancel</Button>
-                </div>
-              </Card>
-            ) : (
-              <Button variant="outline" className="self-start" onClick={() => setShowAddPhase(true)}>
-                <Plus className="mr-2 h-4 w-4" /> Add Phase
-              </Button>
+                </Card>
+              ) : (
+                <Button variant="outline" className="self-start" onClick={() => setShowAddPhase(true)}>
+                  <Plus className="mr-2 h-4 w-4" /> Add Phase
+                </Button>
+              )
             )}
           </div>
         </TabsContent>
@@ -480,7 +588,7 @@ export default function ProjectDetail() {
                   <TableHead>Sub-phase</TableHead>
                   <TableHead className="text-right">Hours</TableHead>
                   <TableHead>Notes</TableHead>
-                  <TableHead>Approved</TableHead>
+                  {!isDesigner && <TableHead>Approved</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -491,115 +599,230 @@ export default function ProjectDetail() {
                     <TableCell>{tb.subPhase || "—"}</TableCell>
                     <TableCell className="text-right font-medium">{tb.hours}h</TableCell>
                     <TableCell className="text-muted-foreground max-w-[200px] truncate text-sm">{tb.description || "—"}</TableCell>
-                    <TableCell>
-                      <button onClick={() => handleApproveTime(tb.id, !tb.approved)}>
-                        {tb.approved
-                          ? <Check className="h-4 w-4 text-emerald-500" />
-                          : <X className="h-4 w-4 text-muted-foreground" />}
-                      </button>
-                    </TableCell>
+                    {!isDesigner && (
+                      <TableCell>
+                        <button onClick={() => handleApproveTime(tb.id, !tb.approved)}>
+                          {tb.approved
+                            ? <Check className="h-4 w-4 text-emerald-500" />
+                            : <X className="h-4 w-4 text-muted-foreground" />}
+                        </button>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
                 {(timeblocks as any[]).length === 0 && (
-                  <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No time logged yet.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={isDesigner ? 5 : 6} className="text-center py-8 text-muted-foreground">No time logged yet.</TableCell></TableRow>
                 )}
               </TableBody>
             </Table>
           </Card>
         </TabsContent>
 
-        {/* EXPENSES TAB */}
-        <TabsContent value="expenses" className="mt-5">
-          <Card className="overflow-hidden">
-            <Table>
-              <TableHeader className="bg-muted/20">
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {(expenses as any[]).map((exp) => (
-                  <TableRow key={exp.id}>
-                    <TableCell>{exp.date}</TableCell>
-                    <TableCell>{exp.description}</TableCell>
-                    <TableCell>{exp.category}</TableCell>
-                    <TableCell className="text-right font-medium">${exp.amount?.toLocaleString()}</TableCell>
-                    <TableCell>
-                      {exp.approved
-                        ? <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-0">Approved</Badge>
-                        : <Badge variant="outline" className="bg-muted text-muted-foreground border-0">Pending</Badge>}
-                    </TableCell>
+        {/* EXPENSES TAB — Lead only */}
+        {!isDesigner && (
+          <TabsContent value="expenses" className="mt-5">
+            <Card className="overflow-hidden">
+              <Table>
+                <TableHeader className="bg-muted/20">
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
+                    <TableHead>Status</TableHead>
                   </TableRow>
-                ))}
-                {(expenses as any[]).length === 0 && (
-                  <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No expenses recorded.</TableCell></TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </Card>
-        </TabsContent>
+                </TableHeader>
+                <TableBody>
+                  {(expenses as any[]).map((exp) => (
+                    <TableRow key={exp.id}>
+                      <TableCell>{exp.date}</TableCell>
+                      <TableCell>{exp.description}</TableCell>
+                      <TableCell>{exp.category}</TableCell>
+                      <TableCell className="text-right font-medium">${exp.amount?.toLocaleString()}</TableCell>
+                      <TableCell>
+                        {exp.approved
+                          ? <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-0">Approved</Badge>
+                          : <Badge variant="outline" className="bg-muted text-muted-foreground border-0">Pending</Badge>}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {(expenses as any[]).length === 0 && (
+                    <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No expenses recorded.</TableCell></TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </Card>
+          </TabsContent>
+        )}
 
-        {/* INVOICES TAB */}
-        <TabsContent value="invoices" className="mt-5">
-          <Card className="overflow-hidden">
-            <Table>
-              <TableHeader className="bg-muted/20">
-                <TableRow>
-                  <TableHead>Invoice #</TableHead>
-                  <TableHead>Issue Date</TableHead>
-                  <TableHead>Due Date</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {(invoices as any[]).map((inv) => (
-                  <TableRow key={inv.id}>
-                    <TableCell className="font-medium">{inv.invoiceNumber}</TableCell>
-                    <TableCell>{format(new Date(inv.issueDate), "MMM d, yyyy")}</TableCell>
-                    <TableCell>{format(new Date(inv.dueDate), "MMM d, yyyy")}</TableCell>
-                    <TableCell className="text-right font-medium">${inv.total?.toLocaleString()}</TableCell>
-                    <TableCell><Badge variant="outline" className="uppercase">{inv.status}</Badge></TableCell>
+        {/* INVOICES TAB — Lead only */}
+        {!isDesigner && (
+          <TabsContent value="invoices" className="mt-5">
+            <Card className="overflow-hidden">
+              <Table>
+                <TableHeader className="bg-muted/20">
+                  <TableRow>
+                    <TableHead>Invoice #</TableHead>
+                    <TableHead>Issue Date</TableHead>
+                    <TableHead>Due Date</TableHead>
+                    <TableHead className="text-right">Total</TableHead>
+                    <TableHead>Status</TableHead>
                   </TableRow>
-                ))}
-                {(invoices as any[]).length === 0 && (
-                  <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No invoices.</TableCell></TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </Card>
-        </TabsContent>
+                </TableHeader>
+                <TableBody>
+                  {(invoices as any[]).map((inv) => (
+                    <TableRow key={inv.id}>
+                      <TableCell className="font-medium">{inv.invoiceNumber}</TableCell>
+                      <TableCell>{format(new Date(inv.issueDate), "MMM d, yyyy")}</TableCell>
+                      <TableCell>{format(new Date(inv.dueDate), "MMM d, yyyy")}</TableCell>
+                      <TableCell className="text-right font-medium">${inv.total?.toLocaleString()}</TableCell>
+                      <TableCell><Badge variant="outline" className="uppercase">{inv.status}</Badge></TableCell>
+                    </TableRow>
+                  ))}
+                  {(invoices as any[]).length === 0 && (
+                    <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No invoices.</TableCell></TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </Card>
+          </TabsContent>
+        )}
 
-        {/* SETTINGS TAB */}
-        <TabsContent value="settings" className="mt-5">
-          <div className="grid gap-4 max-w-md">
-            <Card className="p-5 grid gap-4">
-              <h3 className="font-semibold">Billing Controls</h3>
+        {/* TEAM TAB — Lead only */}
+        {!isDesigner && (
+          <TabsContent value="team" className="mt-5">
+            <div className="flex flex-col gap-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <Label>NTP Received</Label>
-                  <p className="text-xs text-muted-foreground">Notice to Proceed from client</p>
+                  <h3 className="font-semibold">Team Members</h3>
+                  <p className="text-sm text-muted-foreground">People assigned to this project.</p>
                 </div>
-                <Switch checked={(project as any).ntpReceived} onCheckedChange={handleToggleNTP} />
+                {!showAddMember && (
+                  <Button variant="outline" size="sm" onClick={() => setShowAddMember(true)}>
+                    <Plus className="mr-2 h-4 w-4" /> Add Member
+                  </Button>
+                )}
               </div>
-              <div className="grid gap-2">
-                <Label>Payment Status</Label>
-                <Select value={(project as any).paymentStatus} onValueChange={handlePaymentStatus}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="unpaid">Unpaid</SelectItem>
-                    <SelectItem value="partial">Partial</SelectItem>
-                    <SelectItem value="paid">Paid</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </Card>
-          </div>
-        </TabsContent>
+
+              {/* Add member form */}
+              {showAddMember && (
+                <Card className="p-4">
+                  <div className="flex items-end gap-3">
+                    <div className="flex-1 grid gap-2">
+                      <Label>Name</Label>
+                      <Input
+                        placeholder="e.g. Sarah Kim"
+                        value={newMemberName}
+                        onChange={(e) => setNewMemberName(e.target.value)}
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && newMemberName.trim())
+                            addMemberMutation.mutate({ name: newMemberName.trim(), role: newMemberRole });
+                        }}
+                      />
+                    </div>
+                    <div className="w-44 grid gap-2">
+                      <Label>Role</Label>
+                      <Select value={newMemberRole} onValueChange={(v) => setNewMemberRole(v as "lead" | "designer")}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="lead">Project Lead</SelectItem>
+                          <SelectItem value="designer">Designer</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Button
+                      onClick={() => {
+                        if (!newMemberName.trim()) return;
+                        addMemberMutation.mutate({ name: newMemberName.trim(), role: newMemberRole });
+                      }}
+                      disabled={!newMemberName.trim() || addMemberMutation.isPending}
+                    >
+                      Add
+                    </Button>
+                    <Button variant="ghost" onClick={() => setShowAddMember(false)}>Cancel</Button>
+                  </div>
+                </Card>
+              )}
+
+              {/* Member list */}
+              {(members as any[]).length === 0 ? (
+                <Card className="p-8 text-center">
+                  <Users className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+                  <p className="text-muted-foreground">No team members assigned yet.</p>
+                </Card>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {(members as any[]).map((member: any) => (
+                    <Card key={member.id} className="p-4 flex items-center gap-4">
+                      <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                        <UserCircle className="h-5 w-5 text-primary" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm">{member.name}</div>
+                      </div>
+                      <Badge variant="outline" className={`text-xs shrink-0 ${
+                        member.role === "lead"
+                          ? "bg-primary/10 text-primary border-primary/20"
+                          : "bg-muted text-muted-foreground border-transparent"
+                      }`}>
+                        {member.role === "lead" ? "Project Lead" : "Designer"}
+                      </Badge>
+                      <button
+                        onClick={() => deleteMemberMutation.mutate(member.id)}
+                        className="text-muted-foreground hover:text-destructive transition-colors ml-2"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </div>
+          </TabsContent>
+        )}
+
+        {/* SETTINGS TAB — Lead only */}
+        {!isDesigner && (
+          <TabsContent value="settings" className="mt-5">
+            <div className="grid gap-4 max-w-md">
+              <Card className="p-5 grid gap-4">
+                <h3 className="font-semibold">Work Status</h3>
+                <div className="grid gap-2">
+                  <Label>Current Work Status</Label>
+                  <Select value={(project as any).workStatus || "working_internally"} onValueChange={handleWorkStatus}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="working_internally">Working Internally</SelectItem>
+                      <SelectItem value="awaiting_client">Awaiting Client Feedback</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </Card>
+              <Card className="p-5 grid gap-4">
+                <h3 className="font-semibold">Billing Controls</h3>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label>NTP Received</Label>
+                    <p className="text-xs text-muted-foreground">Notice to Proceed from client</p>
+                  </div>
+                  <Switch checked={(project as any).ntpReceived} onCheckedChange={handleToggleNTP} />
+                </div>
+                <div className="grid gap-2">
+                  <Label>Payment Status</Label>
+                  <Select value={(project as any).paymentStatus} onValueChange={handlePaymentStatus}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="unpaid">Unpaid</SelectItem>
+                      <SelectItem value="partial">Partial</SelectItem>
+                      <SelectItem value="paid">Paid</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </Card>
+            </div>
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );

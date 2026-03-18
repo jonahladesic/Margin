@@ -5,9 +5,10 @@ import {
   clientsTable,
   phasesTable,
   timeBlocksTable,
+  projectMembersTable,
 } from "@workspace/db/schema";
 import { randomUUID } from "crypto";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -19,6 +20,7 @@ function formatProject(p: typeof projectsTable.$inferSelect, clientName: string 
     clientName,
     status: p.status,
     type: p.type,
+    workStatus: p.workStatus,
     budgetedHours: parseFloat(p.budgetedHours ?? "0"),
     loggedHours,
     budgetAmount: p.budgetAmount ? parseFloat(p.budgetAmount) : null,
@@ -80,7 +82,7 @@ router.get("/projects/:id", async (req, res) => {
 
 router.post("/projects", async (req, res) => {
   const {
-    name, clientId, status, type, budgetedHours, budgetAmount,
+    name, clientId, status, type, workStatus, budgetedHours, budgetAmount,
     startDate, endDate, description, color,
     ntpReceived, ntpDate, paymentStatus, phases,
   } = req.body;
@@ -102,6 +104,7 @@ router.post("/projects", async (req, res) => {
       clientId: clientId || null,
       status: status || "active",
       type: type || "other",
+      workStatus: workStatus || "working_internally",
       budgetedHours: String(totalBudgeted),
       budgetAmount: budgetAmount ? String(budgetAmount) : null,
       startDate: startDate || null,
@@ -134,7 +137,7 @@ router.post("/projects", async (req, res) => {
 
 router.put("/projects/:id", async (req, res) => {
   const {
-    name, clientId, status, type, budgetedHours, budgetAmount,
+    name, clientId, status, type, workStatus, budgetedHours, budgetAmount,
     startDate, endDate, description, color,
     ntpReceived, ntpDate, paymentStatus,
   } = req.body;
@@ -145,6 +148,7 @@ router.put("/projects/:id", async (req, res) => {
       clientId: clientId ?? undefined,
       status,
       type,
+      workStatus: workStatus ?? undefined,
       budgetedHours: budgetedHours !== undefined ? String(budgetedHours) : undefined,
       budgetAmount: budgetAmount !== undefined ? String(budgetAmount) : undefined,
       startDate,
@@ -259,6 +263,64 @@ router.post("/projects/:id/phases", async (req, res) => {
     pageTurnDate: ph.pageTurnDate,
     createdAt: ph.createdAt.toISOString(),
   });
+});
+
+router.get("/projects/:id/members", async (req, res) => {
+  const members = await db
+    .select()
+    .from(projectMembersTable)
+    .where(eq(projectMembersTable.projectId, req.params.id))
+    .orderBy(projectMembersTable.createdAt);
+
+  res.json(members.map((m) => ({
+    id: m.id,
+    projectId: m.projectId,
+    name: m.name,
+    role: m.role,
+    createdAt: m.createdAt.toISOString(),
+  })));
+});
+
+router.post("/projects/:id/members", async (req, res) => {
+  const { name, role } = req.body;
+  if (!name) {
+    res.status(400).json({ error: "Name is required" });
+    return;
+  }
+  const newMember = await db
+    .insert(projectMembersTable)
+    .values({
+      id: randomUUID(),
+      projectId: req.params.id,
+      name,
+      role: role || "designer",
+    })
+    .returning();
+
+  const m = newMember[0];
+  res.status(201).json({
+    id: m.id,
+    projectId: m.projectId,
+    name: m.name,
+    role: m.role,
+    createdAt: m.createdAt.toISOString(),
+  });
+});
+
+router.delete("/projects/:id/members/:memberId", async (req, res) => {
+  const deleted = await db
+    .delete(projectMembersTable)
+    .where(and(
+      eq(projectMembersTable.id, req.params.memberId),
+      eq(projectMembersTable.projectId, req.params.id),
+    ))
+    .returning();
+
+  if (!deleted[0]) {
+    res.status(404).json({ error: "Member not found" });
+    return;
+  }
+  res.status(204).end();
 });
 
 export default router;

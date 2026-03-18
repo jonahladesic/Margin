@@ -21,7 +21,7 @@ export function AppSidebar() {
   return (
     <Sidebar>
       <SidebarHeader className="p-4">
-        <h2 className="text-xl font-bold tracking-tight text-sidebar-primary">Studio OS</h2>
+        <h2 className="text-xl font-bold tracking-tight text-sidebar-primary">RSM Design OS</h2>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
