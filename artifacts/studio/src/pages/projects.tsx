@@ -82,10 +82,15 @@ const DEFAULT_FORM = {
   ntpReceived: false, ntpDate: "", paymentStatus: "unpaid",
 };
 
-function getUniqueColor(usedColors: Set<string>): string {
-  const unused = PROJECT_COLORS.find((c) => !usedColors.has(c));
+function getUniqueColor(allProjectColors: string[]): string {
+  const unused = PROJECT_COLORS.find((c) => !allProjectColors.includes(c));
   if (unused) return unused;
-  return PROJECT_COLORS[0];
+  const counts = PROJECT_COLORS.map((c) => ({
+    color: c,
+    count: allProjectColors.filter((u) => u === c).length,
+  }));
+  counts.sort((a, b) => a.count - b.count);
+  return counts[0].color;
 }
 
 export default function Projects() {
@@ -135,8 +140,8 @@ export default function Projects() {
 
   const handleDialogOpen = (open: boolean) => {
     if (open) {
-      const usedColors = new Set((projects as any[]).map((p: any) => p.color).filter(Boolean));
-      const color = getUniqueColor(usedColors);
+      const allColors = (projects as any[]).map((p: any) => p.color).filter(Boolean);
+      const color = getUniqueColor(allColors);
       setFormData({ ...DEFAULT_FORM, color });
       resetDialog();
     } else {
@@ -166,24 +171,35 @@ export default function Projects() {
       {
         onSuccess: async (data: any) => {
           const projectId = data?.id;
+          let memberFailures = 0;
           if (projectId && teamMembers.length > 0) {
-            await Promise.all(
+            const results = await Promise.all(
               teamMembers.map((m) =>
                 fetch(`/api/projects/${projectId}/members`, {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ name: m.name, role: m.role }),
-                })
+                }).then((r) => r.ok ? r : Promise.reject())
+                  .catch(() => { memberFailures++; return null; })
               )
             );
+            void results;
           }
-          toast({
-            title: `Project created`,
-            description: [
-              phases.length > 0 && `${phases.length} phase${phases.length !== 1 ? "s" : ""}`,
-              teamMembers.length > 0 && `${teamMembers.length} team member${teamMembers.length !== 1 ? "s" : ""}`,
-            ].filter(Boolean).join(" · ") || undefined,
-          });
+          if (memberFailures > 0) {
+            toast({
+              title: "Project created, but some team members failed to save",
+              description: `${memberFailures} member${memberFailures !== 1 ? "s" : ""} could not be added. Open the project to retry.`,
+              variant: "destructive",
+            });
+          } else {
+            toast({
+              title: "Project created",
+              description: [
+                phases.length > 0 && `${phases.length} phase${phases.length !== 1 ? "s" : ""}`,
+                teamMembers.length > 0 && `${teamMembers.length} team member${teamMembers.length !== 1 ? "s" : ""}`,
+              ].filter(Boolean).join(" · ") || undefined,
+            });
+          }
           setIsDialogOpen(false);
           setFormData({ ...DEFAULT_FORM });
           resetDialog();
@@ -288,11 +304,9 @@ export default function Projects() {
                       Define which phases are in scope and their hour budgets.
                     </p>
                   </div>
-                  {totalPhaseHours > 0 && (
-                    <span className="text-sm font-semibold text-foreground bg-muted/50 px-3 py-1 rounded-md">
-                      {totalPhaseHours}h total
-                    </span>
-                  )}
+                  <span className="text-sm font-semibold text-foreground bg-muted/50 px-3 py-1 rounded-md">
+                    Total scoped: {totalPhaseHours}h
+                  </span>
                 </div>
 
                 {/* Suggestions */}
