@@ -9,6 +9,7 @@ import allocationsRouter from "./allocations";
 import timeblocksRouter from "./timeblocks";
 import invoicesRouter from "./invoices";
 import expensesRouter from "./expenses";
+import breakBlocksRouter from "./break-blocks";
 
 const router: IRouter = Router();
 
@@ -22,5 +23,6 @@ router.use(allocationsRouter);
 router.use(timeblocksRouter);
 router.use(invoicesRouter);
 router.use(expensesRouter);
+router.use(breakBlocksRouter);
 
 export default router;

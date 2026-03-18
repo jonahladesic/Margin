@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, addDays, isSameDay } from "date-fns";
-import { ChevronLeft, ChevronRight, X, ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronLeft, ChevronRight, X, ChevronDown, ChevronUp, Coffee, Building2 } from "lucide-react";
 import { useListTimeBlocks, useCreateTimeBlock, useDeleteTimeBlock } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -9,7 +9,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
+
+function parseLocalDate(dateStr: string): Date {
+  return new Date(dateStr + "T00:00:00");
+}
 
 const SUB_PHASES = ["Project", "Design", "Meetings", "Internal Meetings"];
 
@@ -69,8 +73,13 @@ export default function Calendar() {
   const [modal, setModal] = useState<ModalState>({ open: false, day: null, startHour: 9, hours: 1 });
   const [form, setForm] = useState({ projectId: "", phaseId: "", subPhase: "", description: "" });
   const [panelOpen, setPanelOpen] = useState(true);
+  const [breakModal, setBreakModal] = useState<{ open: boolean; day: Date | null; startHour: number; hours: number }>({
+    open: false, day: null, startHour: 12, hours: 0.5,
+  });
+  const [breakForm, setBreakForm] = useState({ label: "Lunch", hours: "0.5" });
   const isDragging = useRef(false);
   const isBlockDragging = useRef(false);
+  const isBreakDragging = useRef(false);
   const gridRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -87,7 +96,10 @@ export default function Calendar() {
     },
   });
 
-  const activeProjects = (projects as any[]).filter((p: any) => p.status === "active" || !p.status);
+  const rsmInternal = (projects as any[]).find((p: any) => p.isInternal === true);
+  const activeProjects = (projects as any[]).filter(
+    (p: any) => !p.isInternal && (p.status === "active" || !p.status)
+  );
 
   const { data: timeblocks = [] } = useListTimeBlocks({
     request: {
@@ -96,6 +108,36 @@ export default function Calendar() {
         endDate: format(weekEnd, "yyyy-MM-dd"),
       },
     },
+  });
+
+  const { data: breakBlocks = [], refetch: refetchBreaks } = useQuery({
+    queryKey: ["/api/break-blocks", format(weekStart, "yyyy-MM-dd"), format(weekEnd, "yyyy-MM-dd")],
+    queryFn: async () => {
+      const r = await fetch(`/api/break-blocks?startDate=${format(weekStart, "yyyy-MM-dd")}&endDate=${format(weekEnd, "yyyy-MM-dd")}`);
+      return r.json();
+    },
+  });
+
+  const createBreakBlock = useMutation({
+    mutationFn: async (data: { date: string; startTime: number; hours: number; label: string }) => {
+      const r = await fetch("/api/break-blocks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      return r.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Break block added" });
+      refetchBreaks();
+    },
+  });
+
+  const deleteBreakBlock = useMutation({
+    mutationFn: async (id: string) => {
+      await fetch(`/api/break-blocks/${id}`, { method: "DELETE" });
+    },
+    onSuccess: () => refetchBreaks(),
   });
 
   const [phases, setPhases] = useState<Record<string, { id: string; name: string }[]>>({});
@@ -197,8 +239,8 @@ export default function Calendar() {
       blockId: tb.id,
       blockData: tb,
       startSlot: slot,
-      originalDay: new Date(tb.date),
-      currentDay: new Date(tb.date),
+      originalDay: parseLocalDate(tb.date),
+      currentDay: parseLocalDate(tb.date),
       currentSlot: slot,
       isAlt,
     });
@@ -258,9 +300,28 @@ export default function Calendar() {
     }
   };
 
+  const handleBreakSave = () => {
+    if (!breakModal.day) return;
+    const h = parseFloat(breakForm.hours) || 0.5;
+    createBreakBlock.mutate({
+      date: format(breakModal.day, "yyyy-MM-dd"),
+      startTime: breakModal.startHour,
+      hours: h,
+      label: breakForm.label || "Break",
+    });
+    setBreakModal({ open: false, day: null, startHour: 12, hours: 0.5 });
+    setBreakForm({ label: "Lunch", hours: "0.5" });
+  };
+
   const handleProjectDragStart = (e: React.DragEvent, project: any) => {
     e.dataTransfer.setData("projectId", project.id);
     e.dataTransfer.setData("projectName", project.name);
+    e.dataTransfer.setData("dragType", "project");
+    e.dataTransfer.effectAllowed = "copy";
+  };
+
+  const handleBreakDragStart = (e: React.DragEvent) => {
+    e.dataTransfer.setData("dragType", "break");
     e.dataTransfer.effectAllowed = "copy";
   };
 
@@ -271,12 +332,19 @@ export default function Calendar() {
 
   const handleDayDrop = (e: React.DragEvent, day: Date) => {
     e.preventDefault();
-    const projectId = e.dataTransfer.getData("projectId");
-    if (!projectId) return;
-
+    const dragType = e.dataTransfer.getData("dragType");
     const col = e.currentTarget as Element;
     const slot = getSlotFromClientY(e.clientY, col);
     const startHour = slotToHours(slot);
+
+    if (dragType === "break") {
+      setBreakModal({ open: true, day, startHour, hours: 0.5 });
+      setBreakForm({ label: "Lunch", hours: "0.5" });
+      return;
+    }
+
+    const projectId = e.dataTransfer.getData("projectId");
+    if (!projectId) return;
 
     setModal({ open: true, day, startHour, hours: 1 });
     setForm((f) => ({ ...f, projectId, phaseId: "", subPhase: "", description: "" }));
@@ -390,6 +458,32 @@ export default function Calendar() {
             </button>
             {panelOpen && (
               <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-1.5">
+                {/* Break chip */}
+                <div
+                  draggable
+                  onDragStart={handleBreakDragStart}
+                  className="flex items-center gap-2 px-2 py-1.5 rounded-md cursor-grab active:cursor-grabbing hover:bg-muted/60 transition-colors select-none border border-dashed border-border/60"
+                  title="Drag to add a break/lunch block"
+                >
+                  <Coffee className="h-3 w-3 text-gray-400 shrink-0" />
+                  <span className="text-xs font-medium text-gray-400">Break</span>
+                </div>
+
+                {/* RSM Internal pinned */}
+                {rsmInternal && (
+                  <div
+                    draggable
+                    onDragStart={(e) => handleProjectDragStart(e, rsmInternal)}
+                    className="flex items-center gap-2 px-2 py-1.5 rounded-md cursor-grab active:cursor-grabbing hover:bg-muted/60 transition-colors select-none border border-green-800/40 bg-green-950/20"
+                    title="Drag to log overhead time (PTO, WOW, etc.)"
+                  >
+                    <Building2 className="h-3 w-3 text-green-500 shrink-0" />
+                    <span className="text-xs font-medium text-green-400 truncate">RSM Internal</span>
+                  </div>
+                )}
+
+                <div className="border-t border-border/30 my-0.5" />
+
                 {activeProjects.length === 0 ? (
                   <p className="text-xs text-muted-foreground text-center py-4 px-2">No active projects</p>
                 ) : (
@@ -453,7 +547,10 @@ export default function Calendar() {
                 {days.map((day, dIdx) => {
                   const isToday = isSameDay(day, new Date());
                   const dayBlocks = (timeblocks as any[]).filter((tb) =>
-                    isSameDay(new Date(tb.date), day)
+                    isSameDay(parseLocalDate(tb.date), day)
+                  );
+                  const dayBreaks = (breakBlocks as any[]).filter((bb) =>
+                    isSameDay(parseLocalDate(bb.date), day)
                   );
                   const isDragDay = drag && isSameDay(drag.day, day);
                   const dragStartSlot = isDragDay ? Math.min(drag.startSlot, drag.endSlot) : 0;
@@ -520,7 +617,8 @@ export default function Calendar() {
                       )}
 
                       {dayBlocks.map((tb: any, idx: number) => {
-                        const color = getProjectColor(tb.projectId);
+                        const isInternal = rsmInternal && tb.projectId === rsmInternal.id;
+                        const color = isInternal ? "#16a34a" : getProjectColor(tb.projectId);
                         const blockHours = tb.hours || 1;
                         const blockHeightPx = Math.max(hoursToSlot(blockHours) * SLOT_HEIGHT, 20);
                         const hasStartTime = tb.startTime != null && !isNaN(tb.startTime);
@@ -536,16 +634,17 @@ export default function Calendar() {
                             style={{
                               top: topOffset,
                               height: blockHeightPx,
-                              backgroundColor: `${color}22`,
+                              backgroundColor: isInternal ? "#16a34a18" : `${color}22`,
                               borderLeft: `3px solid ${color}`,
                             }}
                             onMouseDown={(e) => handleBlockMouseDown(e, tb)}
                             title="Alt+drag to clone"
                           >
                             <div className="font-semibold truncate" style={{ color }}>
-                              {tb.projectName}
+                              {isInternal && <Building2 className="inline h-2.5 w-2.5 mr-0.5 mb-0.5" />}
+                              {tb.phaseName || tb.projectName}
                             </div>
-                            {tb.phaseName && (
+                            {!isInternal && tb.phaseName && (
                               <div className="text-muted-foreground text-[10px] truncate">{tb.phaseName}</div>
                             )}
                             {tb.subPhase && (
@@ -557,6 +656,37 @@ export default function Calendar() {
                               onClick={(e) => { e.stopPropagation(); handleDelete(tb.id); }}
                             >
                               <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        );
+                      })}
+
+                      {dayBreaks.map((bb: any) => {
+                        const heightPx = Math.max(hoursToSlot(bb.hours || 0.5) * SLOT_HEIGHT, 16);
+                        const topOffset = hoursToSlot(bb.startTime) * SLOT_HEIGHT;
+                        return (
+                          <div
+                            key={bb.id}
+                            data-block
+                            className="absolute left-0.5 right-0.5 rounded-md p-1 text-xs z-20 overflow-hidden group"
+                            style={{
+                              top: topOffset,
+                              height: heightPx,
+                              background: "repeating-linear-gradient(45deg, #374151 0px, #374151 2px, transparent 2px, transparent 8px)",
+                              backgroundColor: "#1f293730",
+                              borderLeft: "3px solid #6b7280",
+                            }}
+                            title={bb.label}
+                          >
+                            <div className="flex items-center gap-0.5 text-gray-400 font-medium">
+                              <Coffee className="h-2.5 w-2.5 shrink-0" />
+                              <span className="truncate">{bb.label}</span>
+                            </div>
+                            <button
+                              className="absolute top-0.5 right-0.5 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-destructive transition-opacity"
+                              onClick={(e) => { e.stopPropagation(); deleteBreakBlock.mutate(bb.id); }}
+                            >
+                              <X className="h-2.5 w-2.5" />
                             </button>
                           </div>
                         );
@@ -669,6 +799,61 @@ export default function Calendar() {
               </Button>
               <Button onClick={handleSave} disabled={createTimeBlock.isPending}>
                 {createTimeBlock.isPending ? "Saving…" : "Save Block"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {breakModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-card border rounded-xl shadow-2xl w-full max-w-sm p-6 flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Coffee className="h-5 w-5 text-gray-400" />
+                <h2 className="text-lg font-bold">Add Break</h2>
+              </div>
+              <button onClick={() => setBreakModal({ open: false, day: null, startHour: 12, hours: 0.5 })} className="text-muted-foreground hover:text-foreground">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            {breakModal.day && (
+              <p className="text-sm text-muted-foreground -mt-2">
+                {format(breakModal.day, "EEEE, MMMM d")} · {formatSlotTime(hoursToSlot(breakModal.startHour))}
+              </p>
+            )}
+            <div className="grid gap-3">
+              <div className="grid gap-2">
+                <Label>Label</Label>
+                <Select value={breakForm.label} onValueChange={(v) => setBreakForm({ ...breakForm, label: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Lunch">Lunch</SelectItem>
+                    <SelectItem value="Break">Break</SelectItem>
+                    <SelectItem value="Personal">Personal</SelectItem>
+                    <SelectItem value="Dr. Appointment">Dr. Appointment</SelectItem>
+                    <SelectItem value="Other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label>Duration (hours)</Label>
+                <Input
+                  type="number"
+                  min={0.25}
+                  max={8}
+                  step={0.25}
+                  value={breakForm.hours}
+                  onChange={(e) => setBreakForm({ ...breakForm, hours: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 pt-1">
+              <Button variant="outline" onClick={() => setBreakModal({ open: false, day: null, startHour: 12, hours: 0.5 })}>
+                Cancel
+              </Button>
+              <Button onClick={handleBreakSave} disabled={createBreakBlock.isPending}>
+                {createBreakBlock.isPending ? "Saving…" : "Add Break"}
               </Button>
             </div>
           </div>

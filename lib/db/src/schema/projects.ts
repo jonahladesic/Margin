@@ -60,6 +60,7 @@ export const projectsTable = pgTable("projects", {
   ntpReceived: boolean("ntp_received").notNull().default(false),
   ntpDate: date("ntp_date"),
   paymentStatus: paymentStatusEnum("payment_status").notNull().default("unpaid"),
+  isInternal: boolean("is_internal").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

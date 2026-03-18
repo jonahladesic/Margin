@@ -21,6 +21,7 @@ function formatProject(p: typeof projectsTable.$inferSelect, clientName: string 
     status: p.status,
     type: p.type,
     workStatus: p.workStatus,
+    isInternal: p.isInternal,
     budgetedHours: parseFloat(p.budgetedHours ?? "0"),
     loggedHours,
     budgetAmount: p.budgetAmount ? parseFloat(p.budgetAmount) : null,
