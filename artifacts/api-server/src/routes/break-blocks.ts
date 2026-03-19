@@ -57,6 +57,31 @@ router.post("/break-blocks", async (req, res) => {
   });
 });
 
+router.put("/break-blocks/:id", async (req, res) => {
+  const { date, startTime } = req.body;
+  const updated = await db
+    .update(breakBlocksTable)
+    .set({
+      ...(date !== undefined ? { date } : {}),
+      ...(startTime !== undefined ? { startTime: String(startTime) } : {}),
+    })
+    .where(eq(breakBlocksTable.id, req.params.id))
+    .returning();
+  if (!updated[0]) {
+    res.status(404).json({ error: "Break block not found" });
+    return;
+  }
+  const b = updated[0];
+  res.json({
+    id: b.id,
+    date: b.date,
+    startTime: parseFloat(b.startTime),
+    hours: parseFloat(b.hours),
+    label: b.label,
+    color: b.color,
+  });
+});
+
 router.delete("/break-blocks/:id", async (req, res) => {
   await db.delete(breakBlocksTable).where(eq(breakBlocksTable.id, req.params.id));
   res.status(204).send();

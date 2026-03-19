@@ -56,6 +56,7 @@ interface BlockDragState {
   currentDay: Date;
   currentSlot: number;
   isAlt: boolean;
+  isBreak?: boolean;
 }
 
 interface ResizeDragState {
@@ -245,6 +246,20 @@ export default function Calendar() {
       queryClient.invalidateQueries({ queryKey: ["/api/allocations"] });
     },
     onError: () => toast({ title: "Failed to update block", variant: "destructive" }),
+  });
+
+  const updateBreakBlock = useMutation({
+    mutationFn: async ({ id, date, startTime }: { id: string; date: string; startTime: number }) => {
+      const r = await fetch(`/api/break-blocks/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date, startTime }),
+      });
+      if (!r.ok) throw new Error("Failed to move break block");
+      return r.json();
+    },
+    onSuccess: () => refetchBreaks(),
+    onError: () => toast({ title: "Failed to move break block", variant: "destructive" }),
   });
 
   const createTimeBlock = useCreateTimeBlock();
@@ -449,7 +464,11 @@ export default function Calendar() {
         const originalStartSlot = tb.startTime != null ? hoursToSlot(tb.startTime) : null;
         const hasMoved = newDate !== originalDate || originalStartSlot !== newTopSlot;
         if (hasMoved) {
-          updateTimeBlock.mutate({ id: tb.id, date: newDate, startTime: newStartHour });
+          if (blockDrag.isBreak) {
+            updateBreakBlock.mutate({ id: tb.id, date: newDate, startTime: newStartHour });
+          } else {
+            updateTimeBlock.mutate({ id: tb.id, date: newDate, startTime: newStartHour });
+          }
         }
       }
       setBlockDrag(null);
@@ -783,18 +802,21 @@ export default function Calendar() {
                         />
                       )}
 
-                      {isBlockDragDay && blockDrag && (
-                        <div
-                          className="absolute left-0.5 right-0.5 rounded-md pointer-events-none z-30 border-2"
-                          style={{
-                            top: Math.max(0, blockDrag.currentSlot - blockDrag.clickOffset) * SLOT_HEIGHT,
-                            height: Math.max(hoursToSlot(blockDrag.blockData.hours || 1) * SLOT_HEIGHT, 20),
-                            backgroundColor: `${getProjectColor(blockDrag.blockData.projectId)}44`,
-                            borderColor: getProjectColor(blockDrag.blockData.projectId),
-                            opacity: 0.85,
-                          }}
-                        />
-                      )}
+                      {isBlockDragDay && blockDrag && (() => {
+                        const ghostColor = blockDrag.isBreak ? "#6b7280" : getProjectColor(blockDrag.blockData.projectId);
+                        return (
+                          <div
+                            className="absolute left-0.5 right-0.5 rounded-md pointer-events-none z-30 border-2"
+                            style={{
+                              top: Math.max(0, blockDrag.currentSlot - blockDrag.clickOffset) * SLOT_HEIGHT,
+                              height: Math.max(hoursToSlot(blockDrag.blockData.hours || 1) * SLOT_HEIGHT, 20),
+                              backgroundColor: `${ghostColor}44`,
+                              borderColor: ghostColor,
+                              opacity: 0.85,
+                            }}
+                          />
+                        );
+                      })()}
 
                       {resizeDrag && isSameDay(resizeDrag.day, day) && (() => {
                         const rd = resizeDrag;
@@ -887,19 +909,42 @@ export default function Calendar() {
                       {dayBreaks.map((bb: any) => {
                         const heightPx = Math.max(hoursToSlot(bb.hours || 0.5) * SLOT_HEIGHT, 16);
                         const topOffset = hoursToSlot(bb.startTime) * SLOT_HEIGHT;
+                        const isBreakBeingMoved = blockDrag && blockDrag.blockId === bb.id && !blockDrag.isAlt;
                         return (
                           <div
                             key={bb.id}
                             data-block
-                            className="absolute left-0.5 right-0.5 rounded-md p-1 text-xs z-20 overflow-hidden group"
+                            className="absolute left-0.5 right-0.5 rounded-md p-1 text-xs z-20 overflow-hidden group cursor-grab active:cursor-grabbing"
                             style={{
                               top: topOffset,
                               height: heightPx,
                               background: "repeating-linear-gradient(45deg, #374151 0px, #374151 2px, transparent 2px, transparent 8px)",
                               backgroundColor: "#1f293730",
                               borderLeft: "3px solid #6b7280",
+                              opacity: isBreakBeingMoved ? 0.3 : 1,
                             }}
                             title={bb.label}
+                            onMouseDown={(e) => {
+                              if (e.button !== 0) return;
+                              e.preventDefault();
+                              e.stopPropagation();
+                              const col = (e.currentTarget as HTMLElement).closest("[data-day-col]") as Element;
+                              const slot = col ? getSlotFromClientY(e.clientY, col) : hoursToSlot(bb.startTime);
+                              const blockTopSlot = hoursToSlot(bb.startTime);
+                              const clickOffset = Math.max(0, slot - blockTopSlot);
+                              isBlockDragging.current = true;
+                              setBlockDrag({
+                                blockId: bb.id,
+                                blockData: bb,
+                                startSlot: slot,
+                                clickOffset,
+                                originalDay: parseLocalDate(bb.date),
+                                currentDay: parseLocalDate(bb.date),
+                                currentSlot: slot,
+                                isAlt: false,
+                                isBreak: true,
+                              });
+                            }}
                           >
                             <div className="flex items-center gap-0.5 text-gray-400 font-medium">
                               <Coffee className="h-2.5 w-2.5 shrink-0" />
