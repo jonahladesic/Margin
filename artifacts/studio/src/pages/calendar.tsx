@@ -58,6 +58,16 @@ interface BlockDragState {
   isAlt: boolean;
 }
 
+interface ResizeDragState {
+  blockId: string;
+  blockData: any;
+  edge: "top" | "bottom";
+  originalStartSlot: number;
+  originalEndSlot: number;
+  currentSlot: number;
+  day: Date;
+}
+
 interface ModalState {
   open: boolean;
   day: Date | null;
@@ -82,8 +92,16 @@ export default function Calendar() {
     open: false, day: null, startHour: 12, hours: 0.5, anchorX: 0, anchorY: 0,
   });
   const [breakForm, setBreakForm] = useState({ label: "Lunch", hours: "0.5" });
+  const [resizeDrag, setResizeDragState] = useState<ResizeDragState | null>(null);
+  const resizeDragRef = useRef<ResizeDragState | null>(null);
+  const setResizeDrag = (val: ResizeDragState | null) => {
+    resizeDragRef.current = val;
+    setResizeDragState(val);
+  };
+
   const isDragging = useRef(false);
   const isBlockDragging = useRef(false);
+  const isResizeDragging = useRef(false);
   const isBreakDragging = useRef(false);
   const gridRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -213,19 +231,20 @@ export default function Calendar() {
   }, [allocFormOpen, weekStartStr, weekEndStr]);
 
   const updateTimeBlock = useMutation({
-    mutationFn: async ({ id, date, startTime }: { id: string; date: string; startTime: number }) => {
+    mutationFn: async ({ id, date, startTime, hours }: { id: string; date: string; startTime: number; hours?: number }) => {
       const r = await fetch(`/api/timeblocks/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date, startTime }),
+        body: JSON.stringify({ date, startTime, ...(hours !== undefined ? { hours } : {}) }),
       });
-      if (!r.ok) throw new Error("Failed to move block");
+      if (!r.ok) throw new Error("Failed to update block");
       return r.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/timeblocks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/allocations"] });
     },
-    onError: () => toast({ title: "Failed to move block", variant: "destructive" }),
+    onError: () => toast({ title: "Failed to update block", variant: "destructive" }),
   });
 
   const createTimeBlock = useCreateTimeBlock();
@@ -288,6 +307,23 @@ export default function Calendar() {
     setForm({ projectId: "", phaseId: "", subPhase: "", description: "" });
   };
 
+  const handleResizeMouseDown = (e: React.MouseEvent, tb: any, edge: "top" | "bottom") => {
+    e.preventDefault();
+    e.stopPropagation();
+    const originalStartSlot = tb.startTime != null ? hoursToSlot(tb.startTime) : 0;
+    const originalEndSlot = originalStartSlot + hoursToSlot(tb.hours || 1);
+    isResizeDragging.current = true;
+    setResizeDrag({
+      blockId: tb.id,
+      blockData: tb,
+      edge,
+      originalStartSlot,
+      originalEndSlot,
+      currentSlot: edge === "top" ? originalStartSlot : originalEndSlot,
+      day: parseLocalDate(tb.date),
+    });
+  };
+
   useEffect(() => {
     const handleGlobalMouseUp = () => {
       if (isDragging.current) {
@@ -297,6 +333,28 @@ export default function Calendar() {
       if (isBlockDragging.current) {
         isBlockDragging.current = false;
         setBlockDrag(null);
+      }
+      if (isResizeDragging.current) {
+        isResizeDragging.current = false;
+        const rd = resizeDragRef.current;
+        if (rd) {
+          const tb = rd.blockData;
+          let newStartSlot: number;
+          let newEndSlot: number;
+          if (rd.edge === "bottom") {
+            newStartSlot = rd.originalStartSlot;
+            newEndSlot = Math.max(rd.originalStartSlot + 1, rd.currentSlot);
+          } else {
+            newStartSlot = Math.min(rd.originalEndSlot - 1, rd.currentSlot);
+            newEndSlot = rd.originalEndSlot;
+          }
+          const newStartTime = slotToHours(newStartSlot);
+          const newHours = Math.max(0.25, slotToHours(newEndSlot - newStartSlot));
+          if (newStartSlot !== rd.originalStartSlot || newEndSlot !== rd.originalEndSlot) {
+            updateTimeBlock.mutate({ id: tb.id, date: tb.date, startTime: newStartTime, hours: newHours });
+          }
+        }
+        setResizeDrag(null);
       }
     };
     window.addEventListener("mouseup", handleGlobalMouseUp);
@@ -331,6 +389,12 @@ export default function Calendar() {
   };
 
   const handleDayMouseMove = (e: React.MouseEvent, day: Date) => {
+    if (isResizeDragging.current) {
+      const col = e.currentTarget as Element;
+      const slot = getSlotFromClientY(e.clientY, col);
+      setResizeDrag(resizeDragRef.current ? { ...resizeDragRef.current, currentSlot: slot } : null);
+      return;
+    }
     if (isDragging.current && drag && isSameDay(drag.day, day)) {
       const col = e.currentTarget as Element;
       const slot = getSlotFromClientY(e.clientY, col);
@@ -471,6 +535,7 @@ export default function Calendar() {
           toast({ title: "Time block saved" });
           setModal({ open: false, day: null, startHour: 9, hours: 1 });
           queryClient.invalidateQueries({ queryKey: ["/api/timeblocks"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/allocations"] });
         },
         onError: () => toast({ title: "Failed to save", variant: "destructive" }),
       }
@@ -731,6 +796,29 @@ export default function Calendar() {
                         />
                       )}
 
+                      {resizeDrag && isSameDay(resizeDrag.day, day) && (() => {
+                        const rd = resizeDrag;
+                        const resizeStartSlot = rd.edge === "bottom"
+                          ? rd.originalStartSlot
+                          : Math.min(rd.originalEndSlot - 1, rd.currentSlot);
+                        const resizeEndSlot = rd.edge === "bottom"
+                          ? Math.max(rd.originalStartSlot + 1, rd.currentSlot)
+                          : rd.originalEndSlot;
+                        const color = getProjectColor(rd.blockData.projectId);
+                        return (
+                          <div
+                            className="absolute left-0.5 right-0.5 rounded-md pointer-events-none z-30 border-2"
+                            style={{
+                              top: resizeStartSlot * SLOT_HEIGHT,
+                              height: Math.max((resizeEndSlot - resizeStartSlot) * SLOT_HEIGHT, SLOT_HEIGHT),
+                              backgroundColor: `${color}44`,
+                              borderColor: color,
+                              opacity: 0.85,
+                            }}
+                          />
+                        );
+                      })()}
+
                       {dayBlocks.map((tb: any, idx: number) => {
                         const isInternal = rsmInternal && tb.projectId === rsmInternal.id;
                         const color = isInternal ? "#16a34a" : getProjectColor(tb.projectId);
@@ -741,6 +829,7 @@ export default function Calendar() {
                           ? hoursToSlot(tb.startTime) * SLOT_HEIGHT
                           : idx * (blockHeightPx + 2) + 1;
                         const isBeingMoved = blockDrag && blockDrag.blockId === tb.id && !blockDrag.isAlt;
+                        const isBeingResized = resizeDrag && resizeDrag.blockId === tb.id;
 
                         return (
                           <div
@@ -753,17 +842,22 @@ export default function Calendar() {
                               backgroundColor: "#16a34a14",
                               border: "1px solid #16a34a55",
                               boxShadow: "inset 2px 0 0 #16a34a88",
-                              opacity: isBeingMoved ? 0.3 : 1,
+                              opacity: isBeingMoved || isBeingResized ? 0.3 : 1,
                             } : {
                               top: topOffset,
                               height: blockHeightPx,
                               backgroundColor: `${color}22`,
                               borderLeft: `3px solid ${color}`,
-                              opacity: isBeingMoved ? 0.3 : 1,
+                              opacity: isBeingMoved || isBeingResized ? 0.3 : 1,
                             }}
                             onMouseDown={(e) => handleBlockMouseDown(e, tb)}
                             title="Alt+drag to clone"
                           >
+                            {/* Top resize handle */}
+                            <div
+                              className="absolute left-0 right-0 top-0 h-2 cursor-ns-resize z-10 opacity-0 group-hover:opacity-100"
+                              onMouseDown={(e) => handleResizeMouseDown(e, tb, "top")}
+                            />
                             <div className="font-semibold truncate" style={{ color }}>
                               {isInternal && <Building2 className="inline h-2.5 w-2.5 mr-0.5 mb-0.5" />}
                               {tb.projectName}
@@ -781,6 +875,11 @@ export default function Calendar() {
                             >
                               <X className="h-3 w-3" />
                             </button>
+                            {/* Bottom resize handle */}
+                            <div
+                              className="absolute left-0 right-0 bottom-0 h-2 cursor-ns-resize z-10 opacity-0 group-hover:opacity-100"
+                              onMouseDown={(e) => handleResizeMouseDown(e, tb, "bottom")}
+                            />
                           </div>
                         );
                       })}

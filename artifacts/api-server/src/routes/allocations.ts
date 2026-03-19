@@ -18,10 +18,17 @@ async function formatAllocation(a: typeof allocationsTable.$inferSelect) {
   const phase = a.phaseId
     ? await db.select().from(phasesTable).where(eq(phasesTable.id, a.phaseId)).limit(1)
     : [];
+  const loggedConditions: ReturnType<typeof eq>[] = [
+    eq(timeBlocksTable.projectId, a.projectId),
+    gte(timeBlocksTable.date, a.startDate),
+    lte(timeBlocksTable.date, a.endDate),
+  ];
+  if (a.phaseId) loggedConditions.push(eq(timeBlocksTable.phaseId, a.phaseId));
+
   const logged = await db
     .select({ total: sql<string>`coalesce(sum(${timeBlocksTable.hours}), 0)` })
     .from(timeBlocksTable)
-    .where(and(eq(timeBlocksTable.allocationId, a.id)));
+    .where(and(...loggedConditions));
 
   return {
     id: a.id,
