@@ -733,7 +733,7 @@ export default function Calendar() {
                           >
                             <div className="font-semibold truncate" style={{ color }}>
                               {isInternal && <Building2 className="inline h-2.5 w-2.5 mr-0.5 mb-0.5" />}
-                              {tb.phaseName || tb.projectName}
+                              {tb.projectName}
                             </div>
                             {!isInternal && tb.phaseName && (
                               <div className="text-muted-foreground text-[10px] truncate">{tb.phaseName}</div>
