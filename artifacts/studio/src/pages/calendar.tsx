@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, addDays, isSameDay } from "date-fns";
-import { ChevronLeft, ChevronRight, X, ChevronDown, ChevronUp, Coffee, Building2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, X, ChevronDown, ChevronUp, Coffee, Building2, Plus } from "lucide-react";
 import { useListTimeBlocks, useCreateTimeBlock, useDeleteTimeBlock } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -73,6 +73,10 @@ export default function Calendar() {
   const [modal, setModal] = useState<ModalState>({ open: false, day: null, startHour: 9, hours: 1 });
   const [form, setForm] = useState({ projectId: "", phaseId: "", subPhase: "", description: "" });
   const [panelOpen, setPanelOpen] = useState(true);
+  const [allocPanelOpen, setAllocPanelOpen] = useState(true);
+  const [allocFormOpen, setAllocFormOpen] = useState(false);
+  const [allocForm, setAllocForm] = useState({ projectId: "", phaseId: "", hours: "8", startDate: "", endDate: "" });
+  const [allocFormPhases, setAllocFormPhases] = useState<{ id: string; name: string }[]>([]);
   const [breakModal, setBreakModal] = useState<{ open: boolean; day: Date | null; startHour: number; hours: number; anchorX: number; anchorY: number }>({
     open: false, day: null, startHour: 12, hours: 0.5, anchorX: 0, anchorY: 0,
   });
@@ -88,12 +92,51 @@ export default function Calendar() {
   const days = Array.from({ length: 7 }).map((_, i) => addDays(weekStart, i));
   const hours = Array.from({ length: HOUR_END - HOUR_START }).map((_, i) => HOUR_START + i);
 
+  const weekStartStr = format(weekStart, "yyyy-MM-dd");
+  const weekEndStr = format(weekEnd, "yyyy-MM-dd");
+
   const { data: projects = [] } = useQuery({
     queryKey: ["/api/projects"],
     queryFn: async () => {
       const r = await fetch("/api/projects");
       return r.json();
     },
+  });
+
+  const { data: currentUser } = useQuery({
+    queryKey: ["/api/auth/user"],
+    queryFn: async () => {
+      const r = await fetch("/api/auth/user");
+      const data = await r.json();
+      return data.user ?? null;
+    },
+  });
+
+  const { data: allocations = [], refetch: refetchAllocations } = useQuery({
+    queryKey: ["/api/allocations", weekStartStr, weekEndStr],
+    queryFn: async () => {
+      const r = await fetch(`/api/allocations?weekStart=${weekStartStr}&weekEnd=${weekEndStr}`);
+      return r.json();
+    },
+  });
+
+  const createAllocation = useMutation({
+    mutationFn: async (data: { userId: string; projectId: string; phaseId?: string; allocatedHours: number; startDate: string; endDate: string }) => {
+      const r = await fetch("/api/allocations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!r.ok) throw new Error("Failed to create allocation");
+      return r.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Allocation added" });
+      setAllocFormOpen(false);
+      setAllocForm({ projectId: "", phaseId: "", hours: "8", startDate: weekStartStr, endDate: weekEndStr });
+      refetchAllocations();
+    },
+    onError: () => toast({ title: "Failed to add allocation", variant: "destructive" }),
   });
 
   const rsmInternal = (projects as any[]).find((p: any) => p.isInternal === true);
@@ -148,6 +191,22 @@ export default function Calendar() {
       .then((r) => r.json())
       .then((data) => setPhases((prev) => ({ ...prev, [form.projectId]: data })));
   }, [form.projectId]);
+
+  useEffect(() => {
+    if (!allocForm.projectId) {
+      setAllocFormPhases([]);
+      return;
+    }
+    fetch(`/api/projects/${allocForm.projectId}/phases`)
+      .then((r) => r.json())
+      .then((data) => setAllocFormPhases(data));
+  }, [allocForm.projectId]);
+
+  useEffect(() => {
+    if (allocFormOpen) {
+      setAllocForm((f) => ({ ...f, startDate: weekStartStr, endDate: weekEndStr }));
+    }
+  }, [allocFormOpen, weekStartStr, weekEndStr]);
 
   const createTimeBlock = useCreateTimeBlock();
   const deleteTimeBlock = useDeleteTimeBlock();
@@ -395,6 +454,25 @@ export default function Calendar() {
     });
   };
 
+  const handleAllocSave = () => {
+    if (!allocForm.projectId || !allocForm.hours || !allocForm.startDate || !allocForm.endDate) {
+      toast({ title: "Please fill in all required fields", variant: "destructive" });
+      return;
+    }
+    if (!currentUser?.id) {
+      toast({ title: "No user session found", variant: "destructive" });
+      return;
+    }
+    createAllocation.mutate({
+      userId: currentUser.id,
+      projectId: allocForm.projectId,
+      phaseId: allocForm.phaseId || undefined,
+      allocatedHours: parseFloat(allocForm.hours),
+      startDate: allocForm.startDate,
+      endDate: allocForm.endDate,
+    });
+  };
+
   const getProjectColor = (projectId: string) => {
     const proj = (projects as any[]).find((p: any) => p.id === projectId);
     return proj?.color || "#4f46e5";
@@ -407,6 +485,11 @@ export default function Calendar() {
     const endSlot = hoursToSlot(startHour + hours);
     return `${formatSlotTime(startSlot)} – ${formatSlotTime(endSlot)}`;
   };
+
+  const allocList = (allocations as any[]);
+  const totalAllocated = allocList.reduce((s: number, a: any) => s + (a.allocatedHours || 0), 0);
+  const totalLogged = allocList.reduce((s: number, a: any) => s + (a.loggedHours || 0), 0);
+  const totalRemaining = totalAllocated - totalLogged;
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -442,6 +525,7 @@ export default function Calendar() {
       </div>
 
       <div className="flex-1 flex overflow-hidden px-6 pb-6 gap-3">
+        {/* Left: Projects panel */}
         <div className={`flex flex-col shrink-0 transition-all duration-200 ${panelOpen ? "w-44" : "w-8"}`}>
           <div className="bg-card border rounded-xl overflow-hidden flex flex-col h-full">
             <button
@@ -509,6 +593,7 @@ export default function Calendar() {
           </div>
         </div>
 
+        {/* Center: Calendar grid */}
         <div className="flex-1 overflow-hidden bg-card border rounded-xl flex flex-col">
           <div className="flex shrink-0">
             <div className="w-14 shrink-0 border-r bg-muted/20" />
@@ -705,8 +790,122 @@ export default function Calendar() {
             </div>
           </div>
         </div>
+
+        {/* Right: Allocations panel */}
+        <div className={`flex flex-col shrink-0 transition-all duration-200 ${allocPanelOpen ? "w-56" : "w-8"}`}>
+          <div className="bg-card border rounded-xl overflow-hidden flex flex-col h-full">
+            <button
+              onClick={() => setAllocPanelOpen(!allocPanelOpen)}
+              className="flex items-center justify-between px-3 py-2.5 border-b hover:bg-muted/50 transition-colors text-sm font-semibold shrink-0 w-full"
+            >
+              {allocPanelOpen ? (
+                <>
+                  <span className="truncate">This Week's Allocations</span>
+                  <ChevronUp className="h-3.5 w-3.5 text-muted-foreground shrink-0 ml-1" />
+                </>
+              ) : (
+                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground mx-auto" />
+              )}
+            </button>
+
+            {allocPanelOpen && (
+              <div className="flex-1 overflow-y-auto flex flex-col">
+                {allocList.length === 0 ? (
+                  <p className="text-xs text-muted-foreground text-center py-6 px-3">No allocations this week</p>
+                ) : (
+                  <div className="flex flex-col divide-y divide-border/30">
+                    {allocList.map((alloc: any) => {
+                      const allocated = alloc.allocatedHours || 0;
+                      const logged = alloc.loggedHours || 0;
+                      const remaining = allocated - logged;
+                      const pct = allocated > 0 ? Math.min((logged / allocated) * 100, 100) : 0;
+                      const isOver = logged > allocated;
+                      const isAmber = !isOver && pct >= 80;
+                      const overBy = isOver ? (logged - allocated).toFixed(1) : null;
+
+                      let barColor = "bg-primary";
+                      if (isOver) barColor = "bg-red-500";
+                      else if (isAmber) barColor = "bg-amber-500";
+
+                      return (
+                        <div key={alloc.id} className="px-3 py-2.5 flex flex-col gap-1.5">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span
+                              className="w-2.5 h-2.5 rounded-full shrink-0"
+                              style={{ backgroundColor: alloc.projectColor || "#4f46e5" }}
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="text-xs font-medium truncate leading-tight">{alloc.projectName}</div>
+                              {alloc.phaseName && (
+                                <div className="text-[10px] text-muted-foreground truncate leading-tight">{alloc.phaseName}</div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="relative h-1.5 rounded-full bg-muted overflow-hidden">
+                            <div
+                              className={`absolute inset-y-0 left-0 rounded-full transition-all ${barColor}`}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="text-[10px] text-muted-foreground tabular-nums">
+                              {logged}h / {allocated}h
+                            </span>
+                            {isOver ? (
+                              <span className="text-[10px] font-semibold text-red-500 shrink-0">
+                                +{overBy}h over
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">
+                                {remaining.toFixed(1)}h left
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {allocList.length > 0 && (
+                  <div className="border-t border-border/50 px-3 py-2 mt-auto">
+                    <div className="text-[10px] text-muted-foreground space-y-0.5">
+                      <div className="flex justify-between">
+                        <span>Allocated</span>
+                        <span className="font-medium text-foreground tabular-nums">{totalAllocated}h</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Logged</span>
+                        <span className="font-medium text-foreground tabular-nums">{totalLogged.toFixed(1)}h</span>
+                      </div>
+                      <div className="flex justify-between border-t border-border/30 pt-0.5 mt-0.5">
+                        <span>Remaining</span>
+                        <span className={`font-semibold tabular-nums ${totalRemaining < 0 ? "text-red-500" : "text-foreground"}`}>
+                          {totalRemaining.toFixed(1)}h
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="px-3 pb-3 pt-2 shrink-0">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full h-7 text-xs gap-1"
+                    onClick={() => setAllocFormOpen(true)}
+                  >
+                    <Plus className="h-3 w-3" />
+                    Add Allocation
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
+      {/* Log time modal */}
       {modal.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="bg-card border rounded-xl shadow-2xl w-full max-w-md p-6 flex flex-col gap-5">
@@ -812,6 +1011,101 @@ export default function Calendar() {
         </div>
       )}
 
+      {/* Add allocation modal */}
+      {allocFormOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-card border rounded-xl shadow-2xl w-full max-w-sm p-6 flex flex-col gap-5">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold">Add Allocation</h2>
+              <button onClick={() => setAllocFormOpen(false)} className="text-muted-foreground hover:text-foreground">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="grid gap-4">
+              <div className="grid gap-2">
+                <Label>Project <span className="text-destructive">*</span></Label>
+                <Select value={allocForm.projectId} onValueChange={(v) => setAllocForm({ ...allocForm, projectId: v, phaseId: "" })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a project…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {activeProjects.map((p: any) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        <div className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: p.color || "#4f46e5" }} />
+                          {p.name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid gap-2">
+                <Label>Phase</Label>
+                <Select
+                  value={allocForm.phaseId}
+                  onValueChange={(v) => setAllocForm({ ...allocForm, phaseId: v })}
+                  disabled={!allocForm.projectId || allocFormPhases.length === 0}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={allocForm.projectId && allocFormPhases.length === 0 ? "No phases" : "Phase (optional)…"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {allocFormPhases.map((ph) => (
+                      <SelectItem key={ph.id} value={ph.id}>{ph.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid gap-2">
+                <Label>Allocated Hours <span className="text-destructive">*</span></Label>
+                <Input
+                  type="number"
+                  min={0.25}
+                  max={168}
+                  step={0.25}
+                  value={allocForm.hours}
+                  onChange={(e) => setAllocForm({ ...allocForm, hours: e.target.value })}
+                  placeholder="e.g. 8"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-2">
+                  <Label>Start Date <span className="text-destructive">*</span></Label>
+                  <Input
+                    type="date"
+                    value={allocForm.startDate}
+                    onChange={(e) => setAllocForm({ ...allocForm, startDate: e.target.value })}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label>End Date <span className="text-destructive">*</span></Label>
+                  <Input
+                    type="date"
+                    value={allocForm.endDate}
+                    onChange={(e) => setAllocForm({ ...allocForm, endDate: e.target.value })}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-1">
+              <Button variant="outline" onClick={() => setAllocFormOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleAllocSave} disabled={createAllocation.isPending}>
+                {createAllocation.isPending ? "Saving…" : "Add Allocation"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Break modal */}
       {breakModal.open && (() => {
         const popW = 240;
         const popH = 230;

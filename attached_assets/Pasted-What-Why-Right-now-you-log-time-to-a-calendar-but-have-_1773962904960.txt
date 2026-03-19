@@ -1,0 +1,27 @@
+What & Why
+Right now you log time to a calendar but have no way to see how much time has been allocated to you for a given week's projects. The allocation system (API + database) is already built — this task surfaces it inside the calendar view as a collapsible sidebar panel, giving a real-time view of allocated vs logged hours so you can see if you're on track, ahead, or need to carry overflow to next week.
+
+Done looks like
+The calendar has a second collapsible panel (right side, or unified with the left project panel) titled "This Week's Allocations".
+Each allocation row shows: project color swatch, project name, phase name (if applicable), allocated hours, logged hours this week, and remaining hours (allocated − logged).
+A small progress bar fills as logged hours approach allocated hours. Turns amber at 80%, red if over.
+If logged hours exceed allocated, an overflow badge shows "+ Xh over" in red.
+A total row at the bottom shows "Xh allocated / Yh logged / Zh remaining" for the week.
+Clicking "+ Add Allocation" opens a quick form: project, phase, hours, date range — calls POST /api/allocations.
+The panel is collapsible (same toggle pattern as the project panel).
+Allocations are fetched for the current week window via GET /api/allocations?weekStart=...&weekEnd=....
+Out of scope
+Allocating for other users (admin-only feature, future)
+Drag-to-resize allocations on a separate timeline view
+Notifications when approaching/exceeding allocation
+Tasks
+Fetch allocations in calendar — Add a useQuery to the calendar page for GET /api/allocations?weekStart=...&weekEnd=.... The existing API returns { allocatedHours, loggedHours, projectName, projectColor, phaseName } per allocation.
+
+Allocation sidebar panel — Build a collapsible panel on the right side of the calendar (or integrated below the project panel). Render one row per allocation with: color swatch, project/phase name, mini progress bar, Xh / Yh label, and overflow badge. Add a totals row at the bottom.
+
+Add allocation form — A small inline form (popover or inline expand) with project selector, phase selector, hours input, date range (defaulting to current week). Calls POST /api/allocations and refreshes the list.
+
+Relevant files
+artifacts/studio/src/pages/calendar.tsx
+artifacts/api-server/src/routes/allocations.ts
+lib/db/src/schema/allocations.ts
