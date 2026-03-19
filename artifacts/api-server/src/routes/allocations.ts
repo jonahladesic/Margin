@@ -77,12 +77,21 @@ router.post("/allocations", async (req, res) => {
 
   if (!resolvedUserId) {
     const firstUser = await db.select().from(usersTable).limit(1);
-    resolvedUserId = firstUser[0]?.id;
-  }
-
-  if (!resolvedUserId) {
-    res.status(400).json({ error: "No user found to assign allocation" });
-    return;
+    if (firstUser[0]) {
+      resolvedUserId = firstUser[0].id;
+    } else {
+      const defaultId = randomUUID();
+      const [created] = await db.insert(usersTable).values({
+        id: defaultId,
+        replitId: defaultId,
+        username: "default",
+        email: null,
+        firstName: "Studio",
+        lastName: "User",
+        profileImage: null,
+      }).returning();
+      resolvedUserId = created.id;
+    }
   }
 
   const newAlloc = await db
