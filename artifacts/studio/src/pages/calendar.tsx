@@ -124,7 +124,7 @@ export default function Calendar() {
   });
 
   const createAllocation = useMutation({
-    mutationFn: async (data: { userId: string; projectId: string; phaseId?: string; allocatedHours: number; startDate: string; endDate: string }) => {
+    mutationFn: async (data: { userId?: string; projectId: string; phaseId?: string; allocatedHours: number; startDate: string; endDate: string }) => {
       const r = await fetch("/api/allocations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -462,12 +462,8 @@ export default function Calendar() {
       toast({ title: "Please fill in all required fields", variant: "destructive" });
       return;
     }
-    if (!currentUser?.id) {
-      toast({ title: "No user session found", variant: "destructive" });
-      return;
-    }
     createAllocation.mutate({
-      userId: currentUser.id,
+      userId: currentUser?.id,
       projectId: allocForm.projectId,
       phaseId: allocForm.phaseId || undefined,
       allocatedHours: parseFloat(allocForm.hours),

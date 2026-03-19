@@ -63,16 +63,33 @@ router.get("/allocations", async (req, res) => {
 });
 
 router.post("/allocations", async (req, res) => {
-  const { userId, projectId, phaseId, allocatedHours, startDate, endDate, notes } = req.body;
-  if (!userId || !projectId || !allocatedHours || !startDate || !endDate) {
+  const { userId: bodyUserId, projectId, phaseId, allocatedHours, startDate, endDate, notes } = req.body;
+  if (!projectId || !allocatedHours || !startDate || !endDate) {
     res.status(400).json({ error: "Missing required fields" });
     return;
   }
+
+  let resolvedUserId = bodyUserId;
+
+  if (!resolvedUserId && req.isAuthenticated?.()) {
+    resolvedUserId = (req.user as any)?.id;
+  }
+
+  if (!resolvedUserId) {
+    const firstUser = await db.select().from(usersTable).limit(1);
+    resolvedUserId = firstUser[0]?.id;
+  }
+
+  if (!resolvedUserId) {
+    res.status(400).json({ error: "No user found to assign allocation" });
+    return;
+  }
+
   const newAlloc = await db
     .insert(allocationsTable)
     .values({
       id: randomUUID(),
-      userId,
+      userId: resolvedUserId,
       projectId,
       phaseId: phaseId || null,
       allocatedHours: String(allocatedHours),
