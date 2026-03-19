@@ -51,6 +51,7 @@ interface BlockDragState {
   blockId: string;
   blockData: any;
   startSlot: number;
+  clickOffset: number;
   originalDay: Date;
   currentDay: Date;
   currentSlot: number;
@@ -211,6 +212,22 @@ export default function Calendar() {
     }
   }, [allocFormOpen, weekStartStr, weekEndStr]);
 
+  const updateTimeBlock = useMutation({
+    mutationFn: async ({ id, date, startTime }: { id: string; date: string; startTime: number }) => {
+      const r = await fetch(`/api/timeblocks/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date, startTime }),
+      });
+      if (!r.ok) throw new Error("Failed to move block");
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/timeblocks"] });
+    },
+    onError: () => toast({ title: "Failed to move block", variant: "destructive" }),
+  });
+
   const createTimeBlock = useCreateTimeBlock();
   const deleteTimeBlock = useDeleteTimeBlock();
 
@@ -297,11 +314,15 @@ export default function Calendar() {
       ? getSlotFromClientY(e.clientY, col)
       : (tb.startTime != null ? hoursToSlot(tb.startTime) : hoursToSlot(9));
 
+    const blockTopSlot = tb.startTime != null ? hoursToSlot(tb.startTime) : slot;
+    const clickOffset = Math.max(0, slot - blockTopSlot);
+
     isBlockDragging.current = true;
     setBlockDrag({
       blockId: tb.id,
       blockData: tb,
       startSlot: slot,
+      clickOffset,
       originalDay: parseLocalDate(tb.date),
       currentDay: parseLocalDate(tb.date),
       currentSlot: slot,
@@ -331,9 +352,9 @@ export default function Calendar() {
     if (isBlockDragging.current && blockDrag) {
       isBlockDragging.current = false;
       const tb = blockDrag.blockData;
-      const dropSlot = blockDrag.currentSlot;
+      const newTopSlot = Math.max(0, blockDrag.currentSlot - blockDrag.clickOffset);
       const dropDay = day;
-      const startHour = slotToHours(dropSlot);
+      const newStartHour = slotToHours(newTopSlot);
       const hours = tb.hours || 1;
 
       if (blockDrag.isAlt) {
@@ -344,7 +365,7 @@ export default function Calendar() {
               phaseId: tb.phaseId || undefined,
               date: format(dropDay, "yyyy-MM-dd"),
               hours,
-              startTime: startHour,
+              startTime: newStartHour,
               subPhase: tb.subPhase || undefined,
               description: tb.description || undefined,
               type: tb.type || "work",
@@ -358,6 +379,14 @@ export default function Calendar() {
             onError: () => toast({ title: "Failed to clone block", variant: "destructive" }),
           }
         );
+      } else {
+        const newDate = format(dropDay, "yyyy-MM-dd");
+        const originalDate = tb.date;
+        const originalStartSlot = tb.startTime != null ? hoursToSlot(tb.startTime) : null;
+        const hasMoved = newDate !== originalDate || originalStartSlot !== newTopSlot;
+        if (hasMoved) {
+          updateTimeBlock.mutate({ id: tb.id, date: newDate, startTime: newStartHour });
+        }
       }
       setBlockDrag(null);
     }
@@ -691,12 +720,13 @@ export default function Calendar() {
 
                       {isBlockDragDay && blockDrag && (
                         <div
-                          className="absolute left-0.5 right-0.5 rounded-md pointer-events-none z-30 opacity-70 border-2"
+                          className="absolute left-0.5 right-0.5 rounded-md pointer-events-none z-30 border-2"
                           style={{
-                            top: blockDrag.currentSlot * SLOT_HEIGHT,
+                            top: Math.max(0, blockDrag.currentSlot - blockDrag.clickOffset) * SLOT_HEIGHT,
                             height: Math.max(hoursToSlot(blockDrag.blockData.hours || 1) * SLOT_HEIGHT, 20),
-                            backgroundColor: `${getProjectColor(blockDrag.blockData.projectId)}33`,
+                            backgroundColor: `${getProjectColor(blockDrag.blockData.projectId)}44`,
                             borderColor: getProjectColor(blockDrag.blockData.projectId),
+                            opacity: 0.85,
                           }}
                         />
                       )}
@@ -710,6 +740,7 @@ export default function Calendar() {
                         const topOffset = hasStartTime
                           ? hoursToSlot(tb.startTime) * SLOT_HEIGHT
                           : idx * (blockHeightPx + 2) + 1;
+                        const isBeingMoved = blockDrag && blockDrag.blockId === tb.id && !blockDrag.isAlt;
 
                         return (
                           <div
@@ -722,11 +753,13 @@ export default function Calendar() {
                               backgroundColor: "#16a34a14",
                               border: "1px solid #16a34a55",
                               boxShadow: "inset 2px 0 0 #16a34a88",
+                              opacity: isBeingMoved ? 0.3 : 1,
                             } : {
                               top: topOffset,
                               height: blockHeightPx,
                               backgroundColor: `${color}22`,
                               borderLeft: `3px solid ${color}`,
+                              opacity: isBeingMoved ? 0.3 : 1,
                             }}
                             onMouseDown={(e) => handleBlockMouseDown(e, tb)}
                             title="Alt+drag to clone"
