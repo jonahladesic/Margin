@@ -660,11 +660,11 @@ export default function Calendar() {
       {/* Top allocations bar */}
       <div className="px-6 pb-2 shrink-0">
         <div className="bg-card border rounded-xl overflow-hidden">
-          <button
-            onClick={() => setTopBarOpen(!topBarOpen)}
-            className="flex items-center justify-between w-full px-4 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
-          >
-            <span className="flex items-center gap-2">
+          <div className="flex items-center">
+            <button
+              onClick={() => setTopBarOpen(!topBarOpen)}
+              className="flex-1 flex items-center gap-2 px-4 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors text-left"
+            >
               <span className="text-foreground">This Week's Allocations</span>
               {allocList.length > 0 && (
                 <span className="font-normal text-muted-foreground">
@@ -676,9 +676,18 @@ export default function Calendar() {
                   · {unallocList.length} untracked
                 </span>
               )}
-            </span>
-            {topBarOpen ? <ChevronUp className="h-3.5 w-3.5 shrink-0" /> : <ChevronDown className="h-3.5 w-3.5 shrink-0" />}
-          </button>
+              {topBarOpen ? <ChevronUp className="h-3.5 w-3.5 shrink-0 ml-auto" /> : <ChevronDown className="h-3.5 w-3.5 shrink-0 ml-auto" />}
+            </button>
+            <div className="px-3 py-1.5 border-l shrink-0">
+              <button
+                onClick={() => setAllocFormOpen(true)}
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60 px-2 py-1 rounded transition-colors"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add Allocation
+              </button>
+            </div>
+          </div>
 
           {topBarOpen && (
             <div className="border-t px-4 py-2.5 flex flex-wrap gap-2">
