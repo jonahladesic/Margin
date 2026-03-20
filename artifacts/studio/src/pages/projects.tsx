@@ -16,7 +16,12 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
 
-const PROJECT_COLORS = ["#4f46e5","#0ea5e9","#10b981","#f59e0b","#ef4444","#8b5cf6","#ec4899","#14b8a6","#f47835","#06b6d4"];
+const PROJECT_COLORS = [
+  "#4f46e5","#0ea5e9","#10b981","#f59e0b","#ef4444",
+  "#8b5cf6","#ec4899","#14b8a6","#f97316","#06b6d4",
+  "#22c55e","#a855f7","#e11d48","#0284c7","#65a30d",
+  "#d97706","#7c3aed","#be185d","#047857","#0f766e",
+];
 
 const PHASE_SUGGESTIONS = [
   "Discovery", "Vision", "Brand Identity", "Brand Standards",

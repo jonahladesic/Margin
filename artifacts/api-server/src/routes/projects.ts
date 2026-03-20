@@ -12,6 +12,23 @@ import { and, eq, sql } from "drizzle-orm";
 
 const router: IRouter = Router();
 
+const PROJECT_COLORS = [
+  "#4f46e5","#0ea5e9","#10b981","#f59e0b","#ef4444",
+  "#8b5cf6","#ec4899","#14b8a6","#f97316","#06b6d4",
+  "#22c55e","#a855f7","#e11d48","#0284c7","#65a30d",
+  "#d97706","#7c3aed","#be185d","#047857","#0f766e",
+];
+
+async function pickUniqueColor(excludeIds: string[] = []): Promise<string> {
+  const existing = await db.select({ color: projectsTable.color }).from(projectsTable);
+  const usedColors = existing.map((r) => r.color).filter(Boolean) as string[];
+  const unused = PROJECT_COLORS.find((c) => !usedColors.includes(c));
+  if (unused) return unused;
+  const counts = PROJECT_COLORS.map((c) => ({ color: c, count: usedColors.filter((u) => u === c).length }));
+  counts.sort((a, b) => a.count - b.count);
+  return counts[0].color;
+}
+
 function formatProject(p: typeof projectsTable.$inferSelect, clientName: string | null, loggedHours: number, billedAmount: number) {
   return {
     id: p.id,
@@ -92,6 +109,7 @@ router.post("/projects", async (req, res) => {
     return;
   }
   const projectId = randomUUID();
+  const assignedColor = color || (await pickUniqueColor());
 
   const totalBudgeted = Array.isArray(phases)
     ? phases.reduce((sum: number, p: any) => sum + (Number(p.budgetedHours) || 0), 0)
@@ -111,7 +129,7 @@ router.post("/projects", async (req, res) => {
       startDate: startDate || null,
       endDate: endDate || null,
       description: description || null,
-      color: color || null,
+      color: assignedColor,
       ntpReceived: ntpReceived ?? false,
       ntpDate: ntpDate || null,
       paymentStatus: paymentStatus || "unpaid",
