@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { Plus, FileCheck, DollarSign, Clock, X, GripVertical, Briefcase, RefreshCw, UserPlus } from "lucide-react";
+import { Plus, FileCheck, DollarSign, Clock, X, GripVertical, Briefcase, RefreshCw, UserPlus, Pencil } from "lucide-react";
 import { useListProjects, useCreateProject, useListClients } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useMutation } from "@tanstack/react-query";
 
 const PROJECT_COLORS = ["#4f46e5","#0ea5e9","#10b981","#f59e0b","#ef4444","#8b5cf6","#ec4899","#14b8a6","#f47835","#06b6d4"];
 
@@ -106,6 +106,26 @@ export default function Projects() {
   const [filter, setFilter] = useState<string>("all");
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [newMember, setNewMember] = useState({ name: "", role: "designer" });
+  const [renameProject, setRenameProject] = useState<{ id: string; name: string } | null>(null);
+  const [renameInput, setRenameInput] = useState("");
+
+  const renameProjectMutation = useMutation({
+    mutationFn: async ({ id, name }: { id: string; name: string }) => {
+      const r = await fetch(`/api/projects/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (!r.ok) throw new Error("Failed to rename project");
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      setRenameProject(null);
+      toast({ title: "Project renamed" });
+    },
+    onError: () => toast({ title: "Failed to rename project", variant: "destructive" }),
+  });
 
   const set = (key: string, value: any) => setFormData((f) => ({ ...f, [key]: value }));
 
@@ -471,6 +491,40 @@ export default function Projects() {
         </Dialog>
       </div>
 
+      {/* Rename dialog */}
+      <Dialog open={!!renameProject} onOpenChange={(o) => { if (!o) setRenameProject(null); }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Rename Project</DialogTitle>
+          </DialogHeader>
+          <div className="py-2">
+            <Label className="sr-only">Project name</Label>
+            <Input
+              autoFocus
+              value={renameInput}
+              onChange={(e) => setRenameInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && renameInput.trim() && renameProject) {
+                  renameProjectMutation.mutate({ id: renameProject.id, name: renameInput.trim() });
+                } else if (e.key === "Escape") {
+                  setRenameProject(null);
+                }
+              }}
+              placeholder="Project name…"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRenameProject(null)}>Cancel</Button>
+            <Button
+              disabled={!renameInput.trim() || renameProjectMutation.isPending}
+              onClick={() => renameProject && renameProjectMutation.mutate({ id: renameProject.id, name: renameInput.trim() })}
+            >
+              {renameProjectMutation.isPending ? "Saving…" : "Rename"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Status filters */}
       <div className="flex gap-2 flex-wrap">
         {["all","active","on_hold","completed","cancelled"].map((s) => (
@@ -498,12 +552,26 @@ export default function Projects() {
             const over = pct > 90;
             return (
               <Link key={project.id} href={`/projects/${project.id}`}>
-                <Card className="h-full hover:-translate-y-0.5 transition-all cursor-pointer overflow-hidden border-l-[5px]"
+                <Card className="h-full hover:-translate-y-0.5 transition-all cursor-pointer overflow-hidden border-l-[5px] group/card"
                   style={{ borderLeftColor: project.color || "var(--primary)" }}>
                   <div className="p-5 flex flex-col gap-3 h-full">
                     <div className="flex justify-between items-start gap-2">
-                      <div className="min-w-0">
-                        <h3 className="font-semibold text-base line-clamp-1">{project.name}</h3>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1">
+                          <h3 className="font-semibold text-base line-clamp-1">{project.name}</h3>
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setRenameProject({ id: project.id, name: project.name });
+                              setRenameInput(project.name);
+                            }}
+                            className="opacity-0 group-hover/card:opacity-100 transition-opacity p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted shrink-0"
+                            title="Rename project"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                         <p className="text-xs text-muted-foreground mt-0.5 truncate">{project.clientName || "Internal"}</p>
                       </div>
                       <Badge variant="outline" className={`shrink-0 text-[10px] px-1.5 border-transparent ${statusColor(project.status)}`}>

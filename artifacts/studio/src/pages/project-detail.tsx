@@ -270,6 +270,8 @@ export default function ProjectDetail() {
   const [newMemberName, setNewMemberName] = useState("");
   const [newMemberRole, setNewMemberRole] = useState<"lead" | "designer">("designer");
   const [showAddMember, setShowAddMember] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState("");
 
   const addPhaseMutation = useMutation({
     mutationFn: async (data: { name: string; budgetedHours: number }) => {
@@ -417,7 +419,38 @@ export default function ProjectDetail() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex items-center gap-3 flex-wrap">
             <div className="w-4 h-4 rounded-full shrink-0" style={{ backgroundColor: project.color || "var(--primary)" }} />
-            <h1 className="text-2xl font-bold tracking-tight">{project.name}</h1>
+            {editingName ? (
+              <input
+                autoFocus
+                value={nameInput}
+                onChange={(e) => setNameInput(e.target.value)}
+                onBlur={() => {
+                  if (nameInput.trim() && nameInput.trim() !== project.name) {
+                    updateProject.mutate({ id: project.id, data: { name: nameInput.trim() } as any });
+                  }
+                  setEditingName(false);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    (e.target as HTMLInputElement).blur();
+                  } else if (e.key === "Escape") {
+                    setEditingName(false);
+                  }
+                }}
+                className="text-2xl font-bold tracking-tight bg-muted/40 border border-primary/40 rounded px-2 py-0.5 outline-none focus:ring-2 focus:ring-primary/30 min-w-0 max-w-sm"
+              />
+            ) : (
+              <div className="flex items-center gap-2 group/title">
+                <h1 className="text-2xl font-bold tracking-tight">{project.name}</h1>
+                <button
+                  onClick={() => { setNameInput(project.name); setEditingName(true); }}
+                  className="opacity-0 group-hover/title:opacity-100 transition-opacity p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted"
+                  title="Rename project"
+                >
+                  <Pencil className="h-4 w-4" />
+                </button>
+              </div>
+            )}
             <Badge variant="outline" className="uppercase">{project.status?.replace("_", " ")}</Badge>
           </div>
           {/* View as role selector */}
