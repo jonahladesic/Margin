@@ -86,6 +86,7 @@ export default function Calendar() {
   const [form, setForm] = useState({ projectId: "", phaseId: "", subPhase: "", description: "" });
   const [panelOpen, setPanelOpen] = useState(true);
   const [allocPanelOpen, setAllocPanelOpen] = useState(true);
+  const [topBarOpen, setTopBarOpen] = useState(true);
   const [allocFormOpen, setAllocFormOpen] = useState(false);
   const [allocForm, setAllocForm] = useState({ projectId: "", phaseId: "", hours: "8", startDate: "", endDate: "" });
   const [allocFormPhases, setAllocFormPhases] = useState<{ id: string; name: string }[]>([]);
@@ -603,6 +604,26 @@ export default function Calendar() {
   const totalLogged = allocList.reduce((s: number, a: any) => s + (a.loggedHours || 0), 0);
   const totalRemaining = totalAllocated - totalLogged;
 
+  // Unallocated but logged: time blocks in this week that don't match any formal allocation
+  const allocatedKeys = new Set(allocList.map((a: any) => `${a.projectId}::${a.phaseId || ""}`));
+  const unallocMap = new Map<string, { projectId: string; projectName: string; projectColor: string; phaseName: string | null; loggedHours: number }>();
+  for (const tb of (timeblocks as any[])) {
+    const key = `${tb.projectId}::${tb.phaseId || ""}`;
+    if (!allocatedKeys.has(key)) {
+      if (!unallocMap.has(key)) {
+        unallocMap.set(key, {
+          projectId: tb.projectId,
+          projectName: tb.projectName || "Unknown",
+          projectColor: tb.projectColor || "#6b7280",
+          phaseName: tb.phaseName || null,
+          loggedHours: 0,
+        });
+      }
+      unallocMap.get(key)!.loggedHours += (tb.hours || 0);
+    }
+  }
+  const unallocList = Array.from(unallocMap.values());
+
   return (
     <div className="h-full flex flex-col overflow-hidden">
       <div className="flex items-center justify-between px-6 pt-6 pb-4 shrink-0">
@@ -634,6 +655,83 @@ export default function Calendar() {
 
       <div className="text-xs text-muted-foreground px-6 pb-2 shrink-0">
         Drag to create · Alt+drag a block to clone · Drag a project from the panel to schedule it
+      </div>
+
+      {/* Top allocations bar */}
+      <div className="px-6 pb-2 shrink-0">
+        <div className="bg-card border rounded-xl overflow-hidden">
+          <button
+            onClick={() => setTopBarOpen(!topBarOpen)}
+            className="flex items-center justify-between w-full px-4 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+          >
+            <span className="flex items-center gap-2">
+              <span className="text-foreground">This Week's Allocations</span>
+              {allocList.length > 0 && (
+                <span className="font-normal text-muted-foreground">
+                  {totalAllocated}h allocated · {totalLogged.toFixed(1)}h logged
+                </span>
+              )}
+              {unallocList.length > 0 && (
+                <span className="font-normal text-amber-500">
+                  · {unallocList.length} untracked
+                </span>
+              )}
+            </span>
+            {topBarOpen ? <ChevronUp className="h-3.5 w-3.5 shrink-0" /> : <ChevronDown className="h-3.5 w-3.5 shrink-0" />}
+          </button>
+
+          {topBarOpen && (
+            <div className="border-t px-4 py-2.5 flex flex-wrap gap-2">
+              {allocList.length === 0 && unallocList.length === 0 ? (
+                <span className="text-xs text-muted-foreground italic">No allocations or logged time this week</span>
+              ) : (
+                <>
+                  {allocList.map((alloc: any) => {
+                    const pct = alloc.allocatedHours > 0 ? Math.min((alloc.loggedHours / alloc.allocatedHours) * 100, 100) : 0;
+                    const isOver = alloc.loggedHours > alloc.allocatedHours;
+                    return (
+                      <div
+                        key={alloc.id}
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs"
+                        style={{ borderColor: `${alloc.projectColor || "#4f46e5"}40`, backgroundColor: `${alloc.projectColor || "#4f46e5"}12` }}
+                      >
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: alloc.projectColor || "#4f46e5" }} />
+                        <span className="font-medium" style={{ color: alloc.projectColor || "#4f46e5" }}>
+                          {alloc.projectName}{alloc.phaseName ? ` · ${alloc.phaseName}` : ""}
+                        </span>
+                        <span className={`text-[10px] tabular-nums ${isOver ? "text-red-500 font-semibold" : "text-muted-foreground"}`}>
+                          {alloc.loggedHours}h / {alloc.allocatedHours}h
+                        </span>
+                        <div className="w-12 h-1 rounded-full bg-muted/60 overflow-hidden">
+                          <div
+                            className={`h-full rounded-full ${isOver ? "bg-red-500" : pct >= 80 ? "bg-amber-500" : "bg-primary"}`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {unallocList.length > 0 && allocList.length > 0 && (
+                    <div className="w-px h-6 bg-border/60 self-center mx-1" />
+                  )}
+                  {unallocList.map((u) => (
+                    <div
+                      key={`${u.projectId}::${u.phaseName || ""}`}
+                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-dashed text-xs border-border/60"
+                      title="No formal allocation — logged without one"
+                    >
+                      <span className="w-2 h-2 rounded-full shrink-0 opacity-60" style={{ backgroundColor: u.projectColor }} />
+                      <span className="text-muted-foreground">
+                        {u.projectName}{u.phaseName ? ` · ${u.phaseName}` : ""}
+                      </span>
+                      <span className="text-[10px] tabular-nums text-muted-foreground">{u.loggedHours.toFixed(1)}h</span>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="flex-1 flex overflow-hidden px-6 pb-6 gap-3">
@@ -986,7 +1084,7 @@ export default function Calendar() {
 
             {allocPanelOpen && (
               <div className="flex-1 overflow-y-auto flex flex-col">
-                {allocList.length === 0 ? (
+                {allocList.length === 0 && unallocList.length === 0 ? (
                   <p className="text-xs text-muted-foreground text-center py-6 px-3">No allocations this week</p>
                 ) : (
                   <div className="flex flex-col divide-y divide-border/30">
@@ -1041,6 +1139,36 @@ export default function Calendar() {
                       );
                     })}
                   </div>
+                )}
+
+                {/* Unallocated section */}
+                {unallocList.length > 0 && (
+                  <>
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/20">
+                      <div className="flex-1 h-px bg-border/50" />
+                      <span className="text-[10px] text-muted-foreground font-medium shrink-0">Not Allocated</span>
+                      <div className="flex-1 h-px bg-border/50" />
+                    </div>
+                    <div className="flex flex-col divide-y divide-border/30">
+                      {unallocList.map((u) => (
+                        <div key={`${u.projectId}::${u.phaseName || ""}`} className="px-3 py-2.5 flex flex-col gap-1">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="w-2.5 h-2.5 rounded-full shrink-0 opacity-60" style={{ backgroundColor: u.projectColor }} />
+                            <div className="flex-1 min-w-0">
+                              <div className="text-xs font-medium truncate leading-tight text-muted-foreground">{u.projectName}</div>
+                              {u.phaseName && (
+                                <div className="text-[10px] text-muted-foreground/70 truncate leading-tight">{u.phaseName}</div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] text-muted-foreground tabular-nums">{u.loggedHours.toFixed(1)}h logged</span>
+                            <span className="text-[10px] text-amber-500 font-medium shrink-0">no alloc.</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
                 )}
 
                 {allocList.length > 0 && (
