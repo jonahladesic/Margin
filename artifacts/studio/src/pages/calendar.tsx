@@ -1,7 +1,8 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, addDays, isSameDay } from "date-fns";
-import { ChevronLeft, ChevronRight, X, ChevronDown, ChevronUp, Coffee, Building2, Plus } from "lucide-react";
+import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, addDays, isSameDay, parse } from "date-fns";
+import { ChevronLeft, ChevronRight, X, ChevronDown, ChevronUp, Coffee, Building2, Plus, Repeat, Eye, Pencil, Trash2, Copy, Calendar as CalendarIcon, Clock, GripVertical, Video, Users, Link } from "lucide-react";
 import { useListTimeBlocks, useCreateTimeBlock, useDeleteTimeBlock } from "@workspace/api-client-react";
+import { useCurrentUser } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -19,7 +20,7 @@ const SUB_PHASES = ["Project", "Design", "Meetings", "Internal Meetings"];
 
 const HOUR_START = 0;
 const HOUR_END = 24;
-const CELL_HEIGHT = 16;
+const CELL_HEIGHT = 12;
 const SLOTS_PER_HOUR = 4;
 const SLOT_HEIGHT = CELL_HEIGHT;
 const TOTAL_SLOTS = (HOUR_END - HOUR_START) * SLOTS_PER_HOUR;
@@ -39,6 +40,17 @@ function formatSlotTime(slot: number): string {
   const period = h >= 12 ? "pm" : "am";
   const displayH = h === 0 ? 12 : h > 12 ? h - 12 : h;
   return m === 0 ? `${displayH}${period}` : `${displayH}:${String(m).padStart(2, "0")}${period}`;
+}
+
+function decimalToTimeString(decimal: number): string {
+  const h = Math.floor(decimal);
+  const m = Math.round((decimal - h) * 60);
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+function timeStringToDecimal(time: string): number {
+  const [h, m] = time.split(":").map(Number);
+  return h + (m || 0) / 60;
 }
 
 interface DragState {
@@ -76,6 +88,30 @@ interface ModalState {
   hours: number;
 }
 
+interface EditModalState {
+  open: boolean;
+  block: any | null;
+  isBreak: boolean;
+}
+
+interface EditForm {
+  projectId: string;
+  phaseId: string;
+  subPhase: string;
+  description: string;
+  date: string;
+  startTime: string;
+  hours: string;
+}
+
+interface EditBreakForm {
+  label: string;
+  date: string;
+  startTime: string;
+  hours: string;
+  recurrenceRule: string;
+}
+
 export default function Calendar() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -84,6 +120,8 @@ export default function Calendar() {
   const [blockDrag, setBlockDrag] = useState<BlockDragState | null>(null);
   const [modal, setModal] = useState<ModalState>({ open: false, day: null, startHour: 9, hours: 1 });
   const [form, setForm] = useState({ projectId: "", phaseId: "", subPhase: "", description: "" });
+  const [modalMode, setModalMode] = useState<"project" | "break" | "meeting">("project");
+  const [meetingForm, setMeetingForm] = useState({ title: "", attendeeIds: [] as string[], zoomLink: "", recurrenceRule: "", description: "" });
   const [panelOpen, setPanelOpen] = useState(true);
   const [allocPanelOpen, setAllocPanelOpen] = useState(true);
   const [topBarOpen, setTopBarOpen] = useState(true);
@@ -93,7 +131,13 @@ export default function Calendar() {
   const [breakModal, setBreakModal] = useState<{ open: boolean; day: Date | null; startHour: number; hours: number; anchorX: number; anchorY: number }>({
     open: false, day: null, startHour: 12, hours: 0.5, anchorX: 0, anchorY: 0,
   });
-  const [breakForm, setBreakForm] = useState({ label: "Lunch", hours: "0.5" });
+  const [breakForm, setBreakForm] = useState({ label: "Lunch", hours: "0.5", recurrenceRule: "" });
+  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; breakId: string; seriesId: string | null; anchorX: number; anchorY: number }>({ open: false, breakId: "", seriesId: null, anchorX: 0, anchorY: 0 });
+  const [editModal, setEditModal] = useState<EditModalState>({ open: false, block: null, isBreak: false });
+  const [editForm, setEditForm] = useState<EditForm>({ projectId: "", phaseId: "", subPhase: "", description: "", date: "", startTime: "", hours: "" });
+  const [editBreakForm, setEditBreakForm] = useState<EditBreakForm>({ label: "", date: "", startTime: "", hours: "", recurrenceRule: "" });
+  const [editPhases, setEditPhases] = useState<{ id: string; name: string }[]>([]);
+  const clickStartPos = useRef<{ x: number; y: number } | null>(null);
   const [resizeDrag, setResizeDragState] = useState<ResizeDragState | null>(null);
   const resizeDragRef = useRef<ResizeDragState | null>(null);
   const setResizeDrag = (val: ResizeDragState | null) => {
@@ -124,22 +168,21 @@ export default function Calendar() {
     },
   });
 
-  const { data: currentUser } = useQuery({
-    queryKey: ["/api/current-user"],
-    queryFn: async () => {
-      const authRes = await fetch("/api/auth/user");
-      const authData = await authRes.json();
-      if (authData?.user?.id) return authData.user;
-      const usersRes = await fetch("/api/users");
-      const users = await usersRes.json();
-      return users[0] ?? null;
-    },
-  });
+  const { user: currentUser, allUsers, isPM, isAdmin } = useCurrentUser();
+  const [viewingUserId, setViewingUserId] = useState<string | null>(null);
+
+  // The effective user whose calendar we're viewing
+  const effectiveUserId = viewingUserId || currentUser?.id || null;
+  const isViewingOther = viewingUserId && viewingUserId !== currentUser?.id;
+  const viewingUser = allUsers.find((u) => u.id === effectiveUserId);
+  const designers = allUsers.filter((u) => u.role === "designer");
 
   const { data: allocations = [], refetch: refetchAllocations } = useQuery({
-    queryKey: ["/api/allocations", weekStartStr, weekEndStr],
+    queryKey: ["/api/allocations", weekStartStr, weekEndStr, effectiveUserId],
     queryFn: async () => {
-      const r = await fetch(`/api/allocations?weekStart=${weekStartStr}&weekEnd=${weekEndStr}`);
+      const params = new URLSearchParams({ weekStart: weekStartStr, weekEnd: weekEndStr });
+      if (effectiveUserId) params.set("userId", effectiveUserId);
+      const r = await fetch(`/api/allocations?${params}`);
       return r.json();
     },
   });
@@ -169,28 +212,59 @@ export default function Calendar() {
   );
 
   const { data: timeblocks = [] } = useListTimeBlocks({
-    request: {
-      query: {
-        startDate: format(weekStart, "yyyy-MM-dd"),
-        endDate: format(weekEnd, "yyyy-MM-dd"),
-      },
-    },
+    startDate: format(weekStart, "yyyy-MM-dd"),
+    endDate: format(weekEnd, "yyyy-MM-dd"),
+    ...(effectiveUserId ? { userId: effectiveUserId } : {}),
   });
 
   const { data: breakBlocks = [], refetch: refetchBreaks } = useQuery({
-    queryKey: ["/api/break-blocks", format(weekStart, "yyyy-MM-dd"), format(weekEnd, "yyyy-MM-dd")],
+    queryKey: ["/api/break-blocks", format(weekStart, "yyyy-MM-dd"), format(weekEnd, "yyyy-MM-dd"), effectiveUserId],
     queryFn: async () => {
-      const r = await fetch(`/api/break-blocks?startDate=${format(weekStart, "yyyy-MM-dd")}&endDate=${format(weekEnd, "yyyy-MM-dd")}`);
+      const params = new URLSearchParams({
+        startDate: format(weekStart, "yyyy-MM-dd"),
+        endDate: format(weekEnd, "yyyy-MM-dd"),
+      });
+      if (effectiveUserId) params.set("userId", effectiveUserId);
+      const r = await fetch(`/api/break-blocks?${params}`);
       return r.json();
     },
   });
 
-  const createBreakBlock = useMutation({
-    mutationFn: async (data: { date: string; startTime: number; hours: number; label: string }) => {
-      const r = await fetch("/api/break-blocks", {
+  const { data: meetings = [], refetch: refetchMeetings } = useQuery({
+    queryKey: ["/api/meetings", weekStartStr, weekEndStr, effectiveUserId],
+    queryFn: async () => {
+      const params = new URLSearchParams({ startDate: weekStartStr, endDate: weekEndStr });
+      if (effectiveUserId) params.set("userId", effectiveUserId);
+      const r = await fetch(`/api/meetings?${params}`);
+      return r.json();
+    },
+  });
+
+  const createMeeting = useMutation({
+    mutationFn: async (data: { title: string; organizerId: string; date: string; startTime: number; hours: number; zoomLink?: string; attendeeIds?: string[]; recurrenceRule?: string; projectId?: string; description?: string }) => {
+      const r = await fetch("/api/meetings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
+      });
+      if (!r.ok) throw new Error("Failed to create meeting");
+      return r.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Meeting scheduled" });
+      queryClient.invalidateQueries({ queryKey: ["/api/meetings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/timeblocks"] });
+      refetchMeetings();
+    },
+    onError: () => toast({ title: "Failed to schedule meeting", variant: "destructive" }),
+  });
+
+  const createBreakBlock = useMutation({
+    mutationFn: async (data: { date: string; startTime: number; hours: number; label: string; recurrenceRule?: string; userId?: string }) => {
+      const r = await fetch("/api/break-blocks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...data, userId: data.userId || effectiveUserId }),
       });
       return r.json();
     },
@@ -201,8 +275,9 @@ export default function Calendar() {
   });
 
   const deleteBreakBlock = useMutation({
-    mutationFn: async (id: string) => {
-      await fetch(`/api/break-blocks/${id}`, { method: "DELETE" });
+    mutationFn: async ({ id, scope }: { id: string; scope?: string }) => {
+      const params = scope ? `?scope=${scope}` : "";
+      await fetch(`/api/break-blocks/${id}${params}`, { method: "DELETE" });
     },
     onSuccess: () => refetchBreaks(),
   });
@@ -321,6 +396,7 @@ export default function Calendar() {
     setDrag(null);
     setModal({ open: true, day, startHour, hours });
     setForm({ projectId: "", phaseId: "", subPhase: "", description: "" });
+    setModalMode("project");
   };
 
   const handleResizeMouseDown = (e: React.MouseEvent, tb: any, edge: "top" | "bottom") => {
@@ -377,11 +453,13 @@ export default function Calendar() {
     return () => window.removeEventListener("mouseup", handleGlobalMouseUp);
   }, []);
 
-  const handleBlockMouseDown = (e: React.MouseEvent, tb: any) => {
+  const handleBlockMouseDown = (e: React.MouseEvent, tb: any, isBreak = false) => {
     if (e.button !== 0) return;
     e.preventDefault();
     e.stopPropagation();
     const isAlt = e.altKey;
+
+    clickStartPos.current = { x: e.clientX, y: e.clientY };
 
     const col = (e.currentTarget as HTMLElement).closest("[data-day-col]") as Element;
     const slot = col
@@ -401,6 +479,7 @@ export default function Calendar() {
       currentDay: parseLocalDate(tb.date),
       currentSlot: slot,
       isAlt,
+      isBreak,
     });
   };
 
@@ -437,10 +516,27 @@ export default function Calendar() {
       const newStartHour = slotToHours(newTopSlot);
       const hours = tb.hours || 1;
 
-      if (blockDrag.isAlt) {
+      // Check if this was a click (not a drag) — open edit modal
+      const startPos = clickStartPos.current;
+      const dist = startPos ? Math.sqrt(Math.pow(e.clientX - startPos.x, 2) + Math.pow(e.clientY - startPos.y, 2)) : 999;
+      clickStartPos.current = null;
+
+      if (dist < 5 && !blockDrag.isAlt) {
+        // Click — open edit modal
+        if (blockDrag.isBreak) {
+          openEditBreakBlock(tb);
+        } else {
+          openEditTimeBlock(tb);
+        }
+        setBlockDrag(null);
+        return;
+      }
+
+      if (blockDrag.isAlt && !blockDrag.isBreak) {
         createTimeBlock.mutate(
           {
             data: {
+              userId: effectiveUserId || undefined,
               projectId: tb.projectId,
               phaseId: tb.phaseId || undefined,
               date: format(dropDay, "yyyy-MM-dd"),
@@ -484,9 +580,10 @@ export default function Calendar() {
       startTime: breakModal.startHour,
       hours: h,
       label: breakForm.label || "Break",
+      ...(breakForm.recurrenceRule && breakForm.recurrenceRule !== "none" ? { recurrenceRule: breakForm.recurrenceRule } : {}),
     });
     setBreakModal({ open: false, day: null, startHour: 12, hours: 0.5, anchorX: 0, anchorY: 0 });
-    setBreakForm({ label: "Lunch", hours: "0.5" });
+    setBreakForm({ label: "Lunch", hours: "0.5", recurrenceRule: "" });
   };
 
   const handleProjectDragStart = (e: React.DragEvent, project: any) => {
@@ -515,7 +612,7 @@ export default function Calendar() {
 
     if (dragType === "break") {
       setBreakModal({ open: true, day, startHour, hours: 0.5, anchorX: e.clientX, anchorY: e.clientY });
-      setBreakForm({ label: "Lunch", hours: "0.5" });
+      setBreakForm({ label: "Lunch", hours: "0.5", recurrenceRule: "" });
       return;
     }
 
@@ -533,13 +630,54 @@ export default function Calendar() {
   };
 
   const handleSave = () => {
-    if (!form.projectId || !modal.day) {
+    if (!modal.day) return;
+
+    if (modalMode === "break") {
+      const h = parseFloat(breakForm.hours) || modal.hours;
+      createBreakBlock.mutate({
+        date: format(modal.day, "yyyy-MM-dd"),
+        startTime: modal.startHour,
+        hours: h,
+        label: breakForm.label || "Break",
+        ...(breakForm.recurrenceRule && breakForm.recurrenceRule !== "none" ? { recurrenceRule: breakForm.recurrenceRule } : {}),
+      });
+      setModal({ open: false, day: null, startHour: 9, hours: 1 });
+      setBreakForm({ label: "Lunch", hours: "0.5", recurrenceRule: "" });
+      return;
+    }
+
+    if (modalMode === "meeting") {
+      if (!meetingForm.title) {
+        toast({ title: "Please enter a meeting title", variant: "destructive" });
+        return;
+      }
+      // Find RSM Internal project for meeting context
+      const internalProject = rsmInternal;
+      createMeeting.mutate({
+        title: meetingForm.title,
+        organizerId: effectiveUserId || currentUser?.id || "",
+        date: format(modal.day, "yyyy-MM-dd"),
+        startTime: modal.startHour,
+        hours: modal.hours,
+        zoomLink: meetingForm.zoomLink || undefined,
+        attendeeIds: meetingForm.attendeeIds.length > 0 ? meetingForm.attendeeIds : undefined,
+        recurrenceRule: meetingForm.recurrenceRule && meetingForm.recurrenceRule !== "none" ? meetingForm.recurrenceRule : undefined,
+        projectId: internalProject?.id,
+        description: meetingForm.description || undefined,
+      });
+      setModal({ open: false, day: null, startHour: 9, hours: 1 });
+      setMeetingForm({ title: "", attendeeIds: [], zoomLink: "", recurrenceRule: "", description: "" });
+      return;
+    }
+
+    if (!form.projectId) {
       toast({ title: "Please select a project", variant: "destructive" });
       return;
     }
     createTimeBlock.mutate(
       {
         data: {
+          userId: effectiveUserId || undefined,
           projectId: form.projectId,
           phaseId: form.phaseId || undefined,
           date: format(modal.day, "yyyy-MM-dd"),
@@ -577,7 +715,7 @@ export default function Calendar() {
       return;
     }
     createAllocation.mutate({
-      userId: currentUser?.id,
+      userId: effectiveUserId || currentUser?.id,
       projectId: allocForm.projectId,
       phaseId: allocForm.phaseId || undefined,
       allocatedHours: parseFloat(allocForm.hours),
@@ -586,9 +724,124 @@ export default function Calendar() {
     });
   };
 
+  // Fetch phases for edit modal when projectId changes
+  useEffect(() => {
+    if (!editForm.projectId) { setEditPhases([]); return; }
+    fetch(`/api/projects/${editForm.projectId}/phases`)
+      .then((r) => r.json())
+      .then((data) => setEditPhases(data))
+      .catch(() => setEditPhases([]));
+  }, [editForm.projectId]);
+
+  const openEditTimeBlock = (tb: any) => {
+    setEditForm({
+      projectId: tb.projectId || "",
+      phaseId: tb.phaseId || "",
+      subPhase: tb.subPhase || "",
+      description: tb.description || "",
+      date: tb.date || "",
+      startTime: tb.startTime != null ? decimalToTimeString(tb.startTime) : "09:00",
+      hours: String(tb.hours || 1),
+    });
+    setEditModal({ open: true, block: tb, isBreak: false });
+  };
+
+  const openEditBreakBlock = (bb: any) => {
+    setEditBreakForm({
+      label: bb.label || "Break",
+      date: bb.date || "",
+      startTime: decimalToTimeString(bb.startTime ?? 0),
+      hours: String(bb.hours || 0.5),
+      recurrenceRule: bb.recurrenceRule || "",
+    });
+    setEditModal({ open: true, block: bb, isBreak: true });
+  };
+
+  const handleEditSave = async () => {
+    if (!editModal.block) return;
+    const tb = editModal.block;
+    try {
+      const r = await fetch(`/api/timeblocks/${tb.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date: editForm.date,
+          startTime: timeStringToDecimal(editForm.startTime),
+          hours: parseFloat(editForm.hours) || 1,
+          phaseId: editForm.phaseId || null,
+          subPhase: editForm.subPhase || null,
+          description: editForm.description || null,
+        }),
+      });
+      if (!r.ok) throw new Error("Failed to update");
+      queryClient.invalidateQueries({ queryKey: ["/api/timeblocks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/allocations"] });
+      toast({ title: "Block updated" });
+      setEditModal({ open: false, block: null, isBreak: false });
+    } catch {
+      toast({ title: "Failed to update", variant: "destructive" });
+    }
+  };
+
+  const handleEditBreakSave = () => {
+    if (!editModal.block) return;
+    const bb = editModal.block;
+    updateBreakBlock.mutate(
+      {
+        id: bb.id,
+        date: editBreakForm.date,
+        startTime: timeStringToDecimal(editBreakForm.startTime),
+      },
+      {
+        onSuccess: () => {
+          toast({ title: "Break updated" });
+          setEditModal({ open: false, block: null, isBreak: false });
+        },
+        onError: () => toast({ title: "Failed to update break", variant: "destructive" }),
+      }
+    );
+  };
+
+  const handleEditDelete = () => {
+    if (!editModal.block) return;
+    if (editModal.isBreak) {
+      deleteBreakBlock.mutate({ id: editModal.block.id });
+    } else {
+      handleDelete(editModal.block.id);
+    }
+    setEditModal({ open: false, block: null, isBreak: false });
+  };
+
+  const handleEditClone = () => {
+    if (!editModal.block || editModal.isBreak) return;
+    const tb = editModal.block;
+    createTimeBlock.mutate(
+      {
+        data: {
+          userId: effectiveUserId || undefined,
+          projectId: tb.projectId,
+          phaseId: tb.phaseId || undefined,
+          date: tb.date,
+          hours: tb.hours,
+          startTime: tb.startTime,
+          subPhase: tb.subPhase || undefined,
+          description: tb.description || undefined,
+          type: tb.type || "work",
+        } as any,
+      },
+      {
+        onSuccess: () => {
+          toast({ title: "Block cloned" });
+          queryClient.invalidateQueries({ queryKey: ["/api/timeblocks"] });
+          setEditModal({ open: false, block: null, isBreak: false });
+        },
+      }
+    );
+  };
+
   const getProjectColor = (projectId: string) => {
     const proj = (projects as any[]).find((p: any) => p.id === projectId);
-    return proj?.color || "#4f46e5";
+    return proj?.color || "#E8772E";
   };
 
   const closeModal = () => setModal({ open: false, day: null, startHour: 9, hours: 1 });
@@ -626,7 +879,7 @@ export default function Calendar() {
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      <div className="flex items-center justify-between px-6 pt-6 pb-4 shrink-0">
+      <div className="flex items-center justify-between px-6 pt-6 pb-4 shrink-0 gap-6">
         <div className="flex items-center gap-4">
           <h1 className="text-3xl font-bold tracking-tight">Calendar</h1>
           <div className="flex items-center gap-1 bg-card rounded-lg border p-1">
@@ -641,8 +894,44 @@ export default function Calendar() {
             </Button>
           </div>
           <Button variant="outline" size="sm" onClick={goToday}>This Week</Button>
+
+          {/* PM/Admin: Designer selector */}
+          {(isPM || isAdmin) && designers.length > 0 && (
+            <div className="flex items-center gap-2 ml-2 pl-3 border-l">
+              <Eye className="h-3.5 w-3.5 text-muted-foreground" />
+              <Select
+                value={viewingUserId || currentUser?.id || ""}
+                onValueChange={(v) => setViewingUserId(v === currentUser?.id ? null : v)}
+              >
+                <SelectTrigger className="h-8 text-xs w-[160px]">
+                  <SelectValue placeholder="View calendar…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {currentUser && (
+                    <SelectItem value={currentUser.id}>
+                      <span className="font-medium">My Calendar</span>
+                    </SelectItem>
+                  )}
+                  {designers.filter((d) => d.id !== currentUser?.id).map((d) => (
+                    <SelectItem key={d.id} value={d.id}>
+                      {d.firstName} {d.lastName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-4">
+          {isViewingOther && viewingUser && (
+            <div className="flex items-center gap-2 text-xs bg-primary/10 text-primary px-3 py-1.5 rounded-full border border-primary/30">
+              <Eye className="h-3 w-3" />
+              <span>Viewing <strong>{viewingUser.firstName} {viewingUser.lastName}</strong>'s calendar</span>
+              <button onClick={() => setViewingUserId(null)} className="ml-1 hover:text-primary/70">
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          )}
           <div className="text-sm text-muted-foreground">
             Week total: <span className="font-semibold text-foreground">{totalLoggedThisWeek}h</span>
             <span className="text-muted-foreground"> / 40h</span>
@@ -702,10 +991,10 @@ export default function Calendar() {
                       <div
                         key={alloc.id}
                         className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs"
-                        style={{ borderColor: `${alloc.projectColor || "#4f46e5"}40`, backgroundColor: `${alloc.projectColor || "#4f46e5"}12` }}
+                        style={{ borderColor: `${alloc.projectColor || "#E8772E"}40`, backgroundColor: `${alloc.projectColor || "#E8772E"}12` }}
                       >
-                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: alloc.projectColor || "#4f46e5" }} />
-                        <span className="font-medium" style={{ color: alloc.projectColor || "#4f46e5" }}>
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: alloc.projectColor || "#E8772E" }} />
+                        <span className="font-medium" style={{ color: alloc.projectColor || "#E8772E" }}>
                           {alloc.projectName}{alloc.phaseName ? ` · ${alloc.phaseName}` : ""}
                         </span>
                         <span className={`text-[10px] tabular-nums ${isOver ? "text-red-500 font-semibold" : "text-muted-foreground"}`}>
@@ -778,11 +1067,11 @@ export default function Calendar() {
                   <div
                     draggable
                     onDragStart={(e) => handleProjectDragStart(e, rsmInternal)}
-                    className="flex items-center gap-2 px-2 py-1.5 rounded-md cursor-grab active:cursor-grabbing hover:bg-muted/60 transition-colors select-none border border-green-800/40 bg-green-950/20"
+                    className="flex items-center gap-2 px-2 py-1.5 rounded-md cursor-grab active:cursor-grabbing hover:bg-muted/60 transition-colors select-none border border-primary/40 bg-primary/10"
                     title="Drag to log overhead time (PTO, WOW, etc.)"
                   >
-                    <Building2 className="h-3 w-3 text-green-500 shrink-0" />
-                    <span className="text-xs font-medium text-green-400 truncate">RSM Internal</span>
+                    <Building2 className="h-3 w-3 text-primary shrink-0" />
+                    <span className="text-xs font-medium text-primary truncate">RSM Internal</span>
                   </div>
                 )}
 
@@ -801,7 +1090,7 @@ export default function Calendar() {
                     >
                       <span
                         className="w-2.5 h-2.5 rounded-full shrink-0"
-                        style={{ backgroundColor: proj.color || "#4f46e5" }}
+                        style={{ backgroundColor: proj.color || "#E8772E" }}
                       />
                       <span className="text-xs font-medium truncate">{proj.name}</span>
                     </div>
@@ -835,17 +1124,20 @@ export default function Calendar() {
           <div className="flex-1 overflow-y-auto" ref={scrollRef}>
             <div className="flex" style={{ height: TOTAL_SLOTS * SLOT_HEIGHT }}>
               <div className="w-14 shrink-0 border-r bg-muted/20 relative">
-                {hours.map((h) => (
-                  <div
-                    key={h}
-                    className="absolute w-full border-b border-border/20 flex items-start justify-end pr-2 pt-0.5"
-                    style={{ top: h * SLOTS_PER_HOUR * SLOT_HEIGHT, height: SLOTS_PER_HOUR * SLOT_HEIGHT }}
-                  >
-                    <span className="text-[10px] text-muted-foreground tabular-nums">
-                      {h === 0 ? "12a" : h === 12 ? "12p" : h > 12 ? `${h - 12}p` : `${h}a`}
-                    </span>
-                  </div>
-                ))}
+                {hours.map((h) => {
+                  if (h === 0) return null; // Skip midnight label at very top
+                  return (
+                    <div
+                      key={h}
+                      className="absolute w-full flex items-start justify-end pr-2"
+                      style={{ top: h * SLOTS_PER_HOUR * SLOT_HEIGHT }}
+                    >
+                      <span className="text-[10px] text-muted-foreground tabular-nums leading-none" style={{ transform: "translateY(-50%)" }}>
+                        {h === 12 ? "12p" : h > 12 ? `${h - 12}p` : `${h}a`}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
 
               <div className="flex-1 grid grid-cols-7" ref={gridRef}>
@@ -884,19 +1176,19 @@ export default function Calendar() {
                       {hours.map((h) => (
                         <div key={h}>
                           <div
-                            className="border-b border-border/30"
-                            style={{ height: SLOT_HEIGHT, top: h * SLOTS_PER_HOUR * SLOT_HEIGHT }}
-                          />
-                          <div
-                            className="border-b border-border/10"
+                            className="border-t border-border/30"
                             style={{ height: SLOT_HEIGHT }}
                           />
                           <div
-                            className="border-b border-border/10"
+                            className="border-t border-border/10"
                             style={{ height: SLOT_HEIGHT }}
                           />
                           <div
-                            className="border-b border-border/10"
+                            className="border-t border-border/10"
+                            style={{ height: SLOT_HEIGHT }}
+                          />
+                          <div
+                            className="border-t border-border/10"
                             style={{ height: SLOT_HEIGHT }}
                           />
                         </div>
@@ -949,8 +1241,10 @@ export default function Calendar() {
                       })()}
 
                       {dayBlocks.map((tb: any, idx: number) => {
-                        const isInternal = rsmInternal && tb.projectId === rsmInternal.id;
-                        const color = isInternal ? "#16a34a" : getProjectColor(tb.projectId);
+                        const isMeeting = tb.type === "meeting";
+                        const isInternal = !isMeeting && rsmInternal && tb.projectId === rsmInternal.id;
+                        const meetingColor = "#a855f7"; // purple
+                        const color = isMeeting ? meetingColor : isInternal ? "#E8772E" : getProjectColor(tb.projectId);
                         const blockHours = tb.hours || 1;
                         const blockHeightPx = Math.max(hoursToSlot(blockHours) * SLOT_HEIGHT, 20);
                         const hasStartTime = tb.startTime != null && !isNaN(tb.startTime);
@@ -965,12 +1259,19 @@ export default function Calendar() {
                             key={tb.id}
                             data-block
                             className="absolute left-0.5 right-0.5 rounded-md p-1.5 text-xs shadow-sm group cursor-grab active:cursor-grabbing z-20 overflow-hidden"
-                            style={isInternal ? {
+                            style={isMeeting ? {
                               top: topOffset,
                               height: blockHeightPx,
-                              backgroundColor: "#16a34a14",
-                              border: "1px solid #16a34a55",
-                              boxShadow: "inset 2px 0 0 #16a34a88",
+                              backgroundColor: `${meetingColor}18`,
+                              border: `1px solid ${meetingColor}55`,
+                              boxShadow: `inset 2px 0 0 ${meetingColor}88`,
+                              opacity: isBeingMoved || isBeingResized ? 0.3 : 1,
+                            } : isInternal ? {
+                              top: topOffset,
+                              height: blockHeightPx,
+                              backgroundColor: "#E8772E14",
+                              border: "1px solid #E8772E55",
+                              boxShadow: "inset 2px 0 0 #E8772E88",
                               opacity: isBeingMoved || isBeingResized ? 0.3 : 1,
                             } : {
                               top: topOffset,
@@ -979,8 +1280,8 @@ export default function Calendar() {
                               borderLeft: `3px solid ${color}`,
                               opacity: isBeingMoved || isBeingResized ? 0.3 : 1,
                             }}
-                            onMouseDown={(e) => handleBlockMouseDown(e, tb)}
-                            title="Alt+drag to clone"
+                            onMouseDown={(e) => handleBlockMouseDown(e, tb, false)}
+                            title="Click to edit · Alt+drag to clone"
                           >
                             {/* Top resize handle */}
                             <div
@@ -988,14 +1289,21 @@ export default function Calendar() {
                               onMouseDown={(e) => handleResizeMouseDown(e, tb, "top")}
                             />
                             <div className="font-semibold truncate" style={{ color }}>
+                              {isMeeting && <Video className="inline h-2.5 w-2.5 mr-0.5 mb-0.5" />}
                               {isInternal && <Building2 className="inline h-2.5 w-2.5 mr-0.5 mb-0.5" />}
-                              {tb.projectName}
+                              {isMeeting ? (tb.title || "Meeting") : tb.projectName}
                             </div>
-                            {!isInternal && tb.phaseName && (
+                            {!isMeeting && !isInternal && tb.phaseName && (
                               <div className="text-muted-foreground text-[10px] truncate">{tb.phaseName}</div>
                             )}
-                            {tb.subPhase && (
+                            {!isMeeting && tb.subPhase && (
                               <div className="text-muted-foreground text-[10px] truncate">{tb.subPhase}</div>
+                            )}
+                            {isMeeting && tb.description?.startsWith("Zoom:") && (
+                              <div className="text-purple-400/70 text-[10px] truncate flex items-center gap-0.5">
+                                <Link className="h-2 w-2" />
+                                Zoom
+                              </div>
                             )}
                             <div className="text-muted-foreground">{tb.hours}h</div>
                             <button
@@ -1030,36 +1338,24 @@ export default function Calendar() {
                               borderLeft: "3px solid #6b7280",
                               opacity: isBreakBeingMoved ? 0.3 : 1,
                             }}
-                            title={bb.label}
-                            onMouseDown={(e) => {
-                              if (e.button !== 0) return;
-                              e.preventDefault();
-                              e.stopPropagation();
-                              const col = (e.currentTarget as HTMLElement).closest("[data-day-col]") as Element;
-                              const slot = col ? getSlotFromClientY(e.clientY, col) : hoursToSlot(bb.startTime);
-                              const blockTopSlot = hoursToSlot(bb.startTime);
-                              const clickOffset = Math.max(0, slot - blockTopSlot);
-                              isBlockDragging.current = true;
-                              setBlockDrag({
-                                blockId: bb.id,
-                                blockData: bb,
-                                startSlot: slot,
-                                clickOffset,
-                                originalDay: parseLocalDate(bb.date),
-                                currentDay: parseLocalDate(bb.date),
-                                currentSlot: slot,
-                                isAlt: false,
-                                isBreak: true,
-                              });
-                            }}
+                            title="Click to edit"
+                            onMouseDown={(e) => handleBlockMouseDown(e, bb, true)}
                           >
                             <div className="flex items-center gap-0.5 text-gray-400 font-medium">
                               <Coffee className="h-2.5 w-2.5 shrink-0" />
                               <span className="truncate">{bb.label}</span>
+                              {bb.seriesId && <Repeat className="h-2 w-2 shrink-0 opacity-60" />}
                             </div>
                             <button
                               className="absolute top-0.5 right-0.5 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-destructive transition-opacity"
-                              onClick={(e) => { e.stopPropagation(); deleteBreakBlock.mutate(bb.id); }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (bb.seriesId) {
+                                  setDeleteConfirm({ open: true, breakId: bb.id, seriesId: bb.seriesId, anchorX: e.clientX, anchorY: e.clientY });
+                                } else {
+                                  deleteBreakBlock.mutate({ id: bb.id });
+                                }
+                              }}
                             >
                               <X className="h-2.5 w-2.5" />
                             </button>
@@ -1082,7 +1378,7 @@ export default function Calendar() {
           <div className="bg-card border rounded-xl shadow-2xl w-full max-w-md p-6 flex flex-col gap-5">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-bold">Log Time Block</h2>
+                <h2 className="text-lg font-bold">{modalMode === "break" ? "Add Break" : modalMode === "meeting" ? "Schedule Meeting" : "Log Time Block"}</h2>
                 {modal.day && (
                   <p className="text-sm text-muted-foreground mt-0.5">
                     {format(modal.day, "EEEE, MMMM d")} · {formatTimeRange(modal.startHour, modal.hours)}
@@ -1096,16 +1392,43 @@ export default function Calendar() {
 
             <div className="grid gap-4">
               <div className="grid gap-2">
-                <Label>Project <span className="text-destructive">*</span></Label>
-                <Select value={form.projectId} onValueChange={(v) => setForm({ ...form, projectId: v, phaseId: "" })}>
+                <Label>{modalMode === "break" ? "Type" : "Project"} <span className="text-destructive">*</span></Label>
+                <Select
+                  value={modalMode === "break" ? "__break__" : modalMode === "meeting" ? "__meeting__" : form.projectId}
+                  onValueChange={(v) => {
+                    if (v === "__break__") {
+                      setModalMode("break");
+                      setBreakForm({ label: "Lunch", hours: String(modal.hours), recurrenceRule: "" });
+                    } else if (v === "__meeting__") {
+                      setModalMode("meeting");
+                      setMeetingForm({ title: "", attendeeIds: [], zoomLink: "", recurrenceRule: "", description: "" });
+                    } else {
+                      setModalMode("project");
+                      setForm({ ...form, projectId: v, phaseId: "" });
+                    }
+                  }}
+                >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select a project…" />
+                    <SelectValue placeholder="Select…" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="__break__">
+                      <div className="flex items-center gap-2">
+                        <Coffee className="h-3 w-3 text-gray-400" />
+                        <span>Break / Lunch</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="__meeting__">
+                      <div className="flex items-center gap-2">
+                        <Video className="h-3 w-3 text-purple-400" />
+                        <span>Meeting</span>
+                      </div>
+                    </SelectItem>
+                    <div className="border-t border-border/30 my-1" />
                     {(projects as any[]).map((p: any) => (
                       <SelectItem key={p.id} value={p.id}>
                         <div className="flex items-center gap-2">
-                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: p.color || "#4f46e5" }} />
+                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: p.color || "#E8772E" }} />
                           {p.name}
                         </div>
                       </SelectItem>
@@ -1114,68 +1437,215 @@ export default function Calendar() {
                 </Select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="grid gap-2">
-                  <Label>Phase</Label>
-                  <Select
-                    value={form.phaseId}
-                    onValueChange={(v) => setForm({ ...form, phaseId: v })}
-                    disabled={!form.projectId}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Phase…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(phases[form.projectId] || []).map((ph) => (
-                        <SelectItem key={ph.id} value={ph.id}>{ph.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid gap-2">
-                  <Label>Sub-phase</Label>
-                  <Select value={form.subPhase} onValueChange={(v) => setForm({ ...form, subPhase: v })}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Sub-phase…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {SUB_PHASES.map((sp) => (
-                        <SelectItem key={sp} value={sp}>{sp}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+              {modalMode === "break" ? (
+                <>
+                  <div className="grid gap-2">
+                    <Label>Label</Label>
+                    <Select value={breakForm.label} onValueChange={(v) => setBreakForm({ ...breakForm, label: v })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Lunch">Lunch</SelectItem>
+                        <SelectItem value="Break">Break</SelectItem>
+                        <SelectItem value="Personal">Personal</SelectItem>
+                        <SelectItem value="Dr. Appointment">Dr. Appointment</SelectItem>
+                        <SelectItem value="Other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-              <div className="grid gap-2">
-                <Label>Hours</Label>
-                <Input
-                  type="number"
-                  min={0.25}
-                  max={24}
-                  step={0.25}
-                  value={modal.hours}
-                  onChange={(e) => setModal({ ...modal, hours: parseFloat(e.target.value) || 1 })}
-                />
-              </div>
+                  <div className="grid gap-2">
+                    <Label>Duration (hours)</Label>
+                    <Input
+                      type="number"
+                      min={0.25}
+                      max={8}
+                      step={0.25}
+                      value={breakForm.hours}
+                      onChange={(e) => setBreakForm({ ...breakForm, hours: e.target.value })}
+                    />
+                  </div>
 
-              <div className="grid gap-2">
-                <Label>Notes</Label>
-                <Textarea
-                  placeholder="What did you work on?"
-                  value={form.description}
-                  onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  rows={2}
-                />
-              </div>
+                  <div className="grid gap-2">
+                    <Label className="flex items-center gap-1"><Repeat className="h-3 w-3" /> Repeat</Label>
+                    <Select value={breakForm.recurrenceRule || "none"} onValueChange={(v) => setBreakForm({ ...breakForm, recurrenceRule: v })}>
+                      <SelectTrigger><SelectValue placeholder="No repeat" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No repeat</SelectItem>
+                        <SelectItem value="daily">Daily</SelectItem>
+                        <SelectItem value="weekdays">Weekdays</SelectItem>
+                        <SelectItem value="weekly">Weekly</SelectItem>
+                        <SelectItem value="biweekly">Every 2 weeks</SelectItem>
+                        <SelectItem value="monthly">Monthly</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
+              ) : modalMode === "meeting" ? (
+                <>
+                  <div className="grid gap-2">
+                    <Label>Title <span className="text-destructive">*</span></Label>
+                    <Input
+                      placeholder="Meeting title…"
+                      value={meetingForm.title}
+                      onChange={(e) => setMeetingForm({ ...meetingForm, title: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label className="flex items-center gap-1"><Users className="h-3 w-3" /> Attendees</Label>
+                    <div className="flex flex-wrap gap-1.5 min-h-[36px] p-2 border rounded-md bg-background">
+                      {meetingForm.attendeeIds.map((id) => {
+                        const user = allUsers.find((u) => u.id === id);
+                        return (
+                          <span key={id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 text-xs">
+                            {user ? `${user.firstName} ${user.lastName}` : id}
+                            <button onClick={() => setMeetingForm({ ...meetingForm, attendeeIds: meetingForm.attendeeIds.filter((a) => a !== id) })} className="hover:text-destructive">
+                              <X className="h-2.5 w-2.5" />
+                            </button>
+                          </span>
+                        );
+                      })}
+                      <Select
+                        value=""
+                        onValueChange={(v) => {
+                          if (v && !meetingForm.attendeeIds.includes(v)) {
+                            setMeetingForm({ ...meetingForm, attendeeIds: [...meetingForm.attendeeIds, v] });
+                          }
+                        }}
+                      >
+                        <SelectTrigger className="h-6 w-auto border-0 bg-transparent shadow-none text-xs text-muted-foreground px-1">
+                          <span>+ Add</span>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {allUsers
+                            .filter((u) => u.id !== currentUser?.id && !meetingForm.attendeeIds.includes(u.id))
+                            .map((u) => (
+                              <SelectItem key={u.id} value={u.id}>
+                                {u.firstName} {u.lastName}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="grid gap-2">
+                      <Label>Hours</Label>
+                      <Input
+                        type="number"
+                        min={0.25}
+                        max={8}
+                        step={0.25}
+                        value={modal.hours}
+                        onChange={(e) => setModal({ ...modal, hours: parseFloat(e.target.value) || 1 })}
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label className="flex items-center gap-1"><Link className="h-3 w-3" /> Zoom Link</Label>
+                      <Input
+                        placeholder="https://zoom.us/j/…"
+                        value={meetingForm.zoomLink}
+                        onChange={(e) => setMeetingForm({ ...meetingForm, zoomLink: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label className="flex items-center gap-1"><Repeat className="h-3 w-3" /> Repeat</Label>
+                    <Select value={meetingForm.recurrenceRule || "none"} onValueChange={(v) => setMeetingForm({ ...meetingForm, recurrenceRule: v })}>
+                      <SelectTrigger><SelectValue placeholder="No repeat" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No repeat</SelectItem>
+                        <SelectItem value="daily">Daily</SelectItem>
+                        <SelectItem value="weekdays">Weekdays</SelectItem>
+                        <SelectItem value="weekly">Weekly</SelectItem>
+                        <SelectItem value="biweekly">Every 2 weeks</SelectItem>
+                        <SelectItem value="monthly">Monthly</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label>Notes</Label>
+                    <Textarea
+                      placeholder="Meeting agenda…"
+                      value={meetingForm.description}
+                      onChange={(e) => setMeetingForm({ ...meetingForm, description: e.target.value })}
+                      rows={2}
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="grid gap-2">
+                      <Label>Phase</Label>
+                      <Select
+                        value={form.phaseId}
+                        onValueChange={(v) => setForm({ ...form, phaseId: v })}
+                        disabled={!form.projectId}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Phase…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(phases[form.projectId] || []).map((ph) => (
+                            <SelectItem key={ph.id} value={ph.id}>{ph.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label>Sub-phase</Label>
+                      <Select value={form.subPhase} onValueChange={(v) => setForm({ ...form, subPhase: v })}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Sub-phase…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {SUB_PHASES.map((sp) => (
+                            <SelectItem key={sp} value={sp}>{sp}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label>Hours</Label>
+                    <Input
+                      type="number"
+                      min={0.25}
+                      max={24}
+                      step={0.25}
+                      value={modal.hours}
+                      onChange={(e) => setModal({ ...modal, hours: parseFloat(e.target.value) || 1 })}
+                    />
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label>Notes</Label>
+                    <Textarea
+                      placeholder="What did you work on?"
+                      value={form.description}
+                      onChange={(e) => setForm({ ...form, description: e.target.value })}
+                      rows={2}
+                    />
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="flex justify-end gap-3 pt-1">
               <Button variant="outline" onClick={closeModal}>
                 Cancel
               </Button>
-              <Button onClick={handleSave} disabled={createTimeBlock.isPending}>
-                {createTimeBlock.isPending ? "Saving…" : "Save Block"}
+              <Button onClick={handleSave} disabled={modalMode === "break" ? createBreakBlock.isPending : modalMode === "meeting" ? createMeeting.isPending : createTimeBlock.isPending}>
+                {modalMode === "break"
+                  ? (createBreakBlock.isPending ? "Saving…" : "Add Break")
+                  : modalMode === "meeting"
+                  ? (createMeeting.isPending ? "Saving…" : "Schedule Meeting")
+                  : (createTimeBlock.isPending ? "Saving…" : "Save Block")}
               </Button>
             </div>
           </div>
@@ -1204,7 +1674,7 @@ export default function Calendar() {
                     {activeProjects.map((p: any) => (
                       <SelectItem key={p.id} value={p.id}>
                         <div className="flex items-center gap-2">
-                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: p.color || "#4f46e5" }} />
+                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: p.color || "#E8772E" }} />
                           {p.name}
                         </div>
                       </SelectItem>
@@ -1330,6 +1800,22 @@ export default function Calendar() {
                   className="h-8 text-xs"
                 />
               </div>
+              <Select value={breakForm.recurrenceRule} onValueChange={(v) => setBreakForm({ ...breakForm, recurrenceRule: v })}>
+                <SelectTrigger className="h-8 text-xs">
+                  <div className="flex items-center gap-1.5">
+                    <Repeat className="h-3 w-3 opacity-60" />
+                    <SelectValue placeholder="No repeat" />
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No repeat</SelectItem>
+                  <SelectItem value="daily">Daily</SelectItem>
+                  <SelectItem value="weekdays">Weekdays</SelectItem>
+                  <SelectItem value="weekly">Weekly</SelectItem>
+                  <SelectItem value="biweekly">Every 2 weeks</SelectItem>
+                  <SelectItem value="monthly">Monthly</SelectItem>
+                </SelectContent>
+              </Select>
               <div className="flex justify-end gap-2">
                 <Button variant="outline" size="sm" onClick={closeBreak}>Cancel</Button>
                 <Button size="sm" onClick={handleBreakSave} disabled={createBreakBlock.isPending}>
@@ -1340,6 +1826,268 @@ export default function Calendar() {
           </>
         );
       })()}
+
+      {/* Delete recurring break confirmation */}
+      {deleteConfirm.open && (() => {
+        const popW = 200;
+        const popH = 120;
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        const popX = deleteConfirm.anchorX + popW > vw ? deleteConfirm.anchorX - popW : deleteConfirm.anchorX;
+        const popY = deleteConfirm.anchorY + popH > vh ? vh - popH - 12 : deleteConfirm.anchorY;
+        const close = () => setDeleteConfirm({ open: false, breakId: "", seriesId: null, anchorX: 0, anchorY: 0 });
+        return (
+          <>
+            <div className="fixed inset-0 z-40" onClick={close} />
+            <div className="fixed z-50 bg-card border rounded-xl shadow-2xl p-3 flex flex-col gap-2" style={{ left: popX, top: popY, width: popW }}>
+              <span className="text-xs font-semibold">Delete recurring break</span>
+              <button className="text-xs text-left px-2 py-1.5 rounded hover:bg-muted" onClick={() => { deleteBreakBlock.mutate({ id: deleteConfirm.breakId }); close(); }}>
+                This one only
+              </button>
+              <button className="text-xs text-left px-2 py-1.5 rounded hover:bg-muted" onClick={() => { deleteBreakBlock.mutate({ id: deleteConfirm.breakId, scope: "future" }); close(); }}>
+                This &amp; future
+              </button>
+              <button className="text-xs text-left px-2 py-1.5 rounded hover:bg-destructive/10 text-destructive" onClick={() => { deleteBreakBlock.mutate({ id: deleteConfirm.breakId, scope: "all" }); close(); }}>
+                All in series
+              </button>
+            </div>
+          </>
+        );
+      })()}
+
+      {/* Edit Time Block Modal */}
+      {editModal.open && !editModal.isBreak && editModal.block && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-card border rounded-xl shadow-2xl w-full max-w-md p-6 flex flex-col gap-5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: getProjectColor(editModal.block.projectId) }} />
+                <div>
+                  <h2 className="text-lg font-bold">Edit Time Block</h2>
+                  <p className="text-sm text-muted-foreground">{editModal.block.projectName}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={handleEditClone}
+                  className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                  title="Clone block"
+                >
+                  <Copy className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={handleEditDelete}
+                  className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                  title="Delete block"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+                <button onClick={() => setEditModal({ open: false, block: null, isBreak: false })} className="p-1.5 text-muted-foreground hover:text-foreground">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="grid gap-4">
+              <div className="grid gap-2">
+                <Label>Project</Label>
+                <Select value={editForm.projectId} onValueChange={(v) => setEditForm({ ...editForm, projectId: v, phaseId: "" })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a project…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(projects as any[]).map((p: any) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        <div className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: p.color || "#E8772E" }} />
+                          {p.name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-2">
+                  <Label>Phase</Label>
+                  <Select
+                    value={editForm.phaseId || "__none__"}
+                    onValueChange={(v) => setEditForm({ ...editForm, phaseId: v === "__none__" ? "" : v })}
+                    disabled={!editForm.projectId}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Phase…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">None</SelectItem>
+                      {editPhases.map((ph) => (
+                        <SelectItem key={ph.id} value={ph.id}>{ph.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-2">
+                  <Label>Sub-phase</Label>
+                  <Select value={editForm.subPhase || "__none__"} onValueChange={(v) => setEditForm({ ...editForm, subPhase: v === "__none__" ? "" : v })}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Sub-phase…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">None</SelectItem>
+                      {SUB_PHASES.map((sp) => (
+                        <SelectItem key={sp} value={sp}>{sp}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="grid gap-2">
+                  <Label className="flex items-center gap-1"><CalendarIcon className="h-3 w-3" /> Date</Label>
+                  <Input
+                    type="date"
+                    value={editForm.date}
+                    onChange={(e) => setEditForm({ ...editForm, date: e.target.value })}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label className="flex items-center gap-1"><Clock className="h-3 w-3" /> Start</Label>
+                  <Input
+                    type="time"
+                    step={900}
+                    value={editForm.startTime}
+                    onChange={(e) => setEditForm({ ...editForm, startTime: e.target.value })}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label>Hours</Label>
+                  <Input
+                    type="number"
+                    min={0.25}
+                    max={24}
+                    step={0.25}
+                    value={editForm.hours}
+                    onChange={(e) => setEditForm({ ...editForm, hours: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-2">
+                <Label>Notes</Label>
+                <Textarea
+                  placeholder="What did you work on?"
+                  value={editForm.description}
+                  onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                  rows={2}
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-1">
+              <Button variant="outline" onClick={() => setEditModal({ open: false, block: null, isBreak: false })}>
+                Cancel
+              </Button>
+              <Button onClick={handleEditSave}>
+                Save Changes
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Break Block Modal */}
+      {editModal.open && editModal.isBreak && editModal.block && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-card border rounded-xl shadow-2xl w-full max-w-sm p-6 flex flex-col gap-5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Coffee className="h-4 w-4 text-gray-400" />
+                <div>
+                  <h2 className="text-lg font-bold">Edit Break</h2>
+                  <p className="text-sm text-muted-foreground">{editModal.block.label}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={handleEditDelete}
+                  className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                  title="Delete break"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+                <button onClick={() => setEditModal({ open: false, block: null, isBreak: false })} className="p-1.5 text-muted-foreground hover:text-foreground">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="grid gap-4">
+              <div className="grid gap-2">
+                <Label>Type</Label>
+                <Select value={editBreakForm.label} onValueChange={(v) => setEditBreakForm({ ...editBreakForm, label: v })}>
+                  <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Lunch">Lunch</SelectItem>
+                    <SelectItem value="Break">Break</SelectItem>
+                    <SelectItem value="Personal">Personal</SelectItem>
+                    <SelectItem value="Dr. Appointment">Dr. Appointment</SelectItem>
+                    <SelectItem value="Other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="grid gap-2">
+                  <Label className="flex items-center gap-1"><CalendarIcon className="h-3 w-3" /> Date</Label>
+                  <Input
+                    type="date"
+                    value={editBreakForm.date}
+                    onChange={(e) => setEditBreakForm({ ...editBreakForm, date: e.target.value })}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label className="flex items-center gap-1"><Clock className="h-3 w-3" /> Start</Label>
+                  <Input
+                    type="time"
+                    step={900}
+                    value={editBreakForm.startTime}
+                    onChange={(e) => setEditBreakForm({ ...editBreakForm, startTime: e.target.value })}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label>Hours</Label>
+                  <Input
+                    type="number"
+                    min={0.25}
+                    max={8}
+                    step={0.25}
+                    value={editBreakForm.hours}
+                    onChange={(e) => setEditBreakForm({ ...editBreakForm, hours: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              {editModal.block.seriesId && (
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted/40 rounded-md px-2.5 py-1.5">
+                  <Repeat className="h-3 w-3" />
+                  <span>Part of a recurring series ({editModal.block.recurrenceRule})</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-3 pt-1">
+              <Button variant="outline" onClick={() => setEditModal({ open: false, block: null, isBreak: false })}>
+                Cancel
+              </Button>
+              <Button onClick={handleEditBreakSave}>
+                Save Changes
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

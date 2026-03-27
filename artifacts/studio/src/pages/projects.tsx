@@ -17,10 +17,10 @@ import { useToast } from "@/hooks/use-toast";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
 
 const PROJECT_COLORS = [
-  "#4f46e5","#0ea5e9","#10b981","#f59e0b","#ef4444",
-  "#8b5cf6","#ec4899","#14b8a6","#f97316","#06b6d4",
-  "#22c55e","#a855f7","#e11d48","#0284c7","#65a30d",
-  "#d97706","#7c3aed","#be185d","#047857","#0f766e",
+  "#f97316","#E8772E","#10b981","#f59e0b","#ef4444",
+  "#8b5cf6","#ec4899","#14b8a6","#d97706","#22c55e",
+  "#a855f7","#e11d48","#65a30d","#be185d","#047857",
+  "#0f766e","#7c3aed","#f43f5e","#84cc16","#c084fc",
 ];
 
 const PHASE_SUGGESTIONS = [
@@ -54,7 +54,7 @@ function NTPBadge({ received }: { received: boolean }) {
 function PaymentBadge({ status }: { status: string }) {
   const m: Record<string, { label: string; cls: string }> = {
     paid:    { label: "Paid",    cls: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" },
-    partial: { label: "Partial", cls: "bg-blue-500/10 text-blue-500 border-blue-500/20" },
+    partial: { label: "Partial", cls: "bg-orange-500/10 text-orange-500 border-orange-500/20" },
     unpaid:  { label: "Unpaid",  cls: "bg-red-500/10 text-red-500 border-red-500/20" },
   };
   const s = m[status] || m.unpaid;
@@ -74,7 +74,7 @@ function WorkStatusBadge({ status }: { status: string }) {
     );
   }
   return (
-    <Badge variant="outline" className="gap-1 bg-sky-500/10 text-sky-400 border-sky-500/20 text-[10px] px-1.5">
+    <Badge variant="outline" className="gap-1 bg-orange-500/10 text-orange-400 border-orange-500/20 text-[10px] px-1.5">
       <Briefcase className="h-3 w-3" /> Working Internally
     </Badge>
   );
@@ -239,7 +239,7 @@ export default function Projects() {
     const m: Record<string, string> = {
       active:    "bg-emerald-500/15 text-emerald-500",
       on_hold:   "bg-amber-500/15 text-amber-500",
-      completed: "bg-blue-500/15 text-blue-500",
+      completed: "bg-orange-500/15 text-orange-500",
       cancelled: "bg-gray-500/15 text-gray-400",
     };
     return m[s] || m.cancelled;

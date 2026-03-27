@@ -1,7 +1,14 @@
 import { useState, useEffect, useCallback } from "react";
-import type { AuthUser } from "@workspace/api-client-react";
 
-export type { AuthUser };
+export interface AuthUser {
+  id: string;
+  email?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  profileImageUrl?: string | null;
+  role?: string;
+  [key: string]: unknown;
+}
 
 interface AuthState {
   user: AuthUser | null;
@@ -21,7 +28,7 @@ export function useAuth(): AuthState {
     fetch("/api/auth/user", { credentials: "include" })
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json() as Promise<{ user: AuthUser | null }>;
+        return res.json() as Promise<{ authenticated: boolean; user: AuthUser | null }>;
       })
       .then((data) => {
         if (!cancelled) {
@@ -42,12 +49,15 @@ export function useAuth(): AuthState {
   }, []);
 
   const login = useCallback(() => {
-    const base = import.meta.env.BASE_URL.replace(/\/+$/, "") || "/";
-    window.location.href = `/api/login?returnTo=${encodeURIComponent(base)}`;
+    window.location.href = "/login";
   }, []);
 
   const logout = useCallback(() => {
-    window.location.href = "/api/logout";
+    fetch("/api/auth/logout", { method: "POST", credentials: "include" }).then(
+      () => {
+        window.location.href = "/login";
+      },
+    );
   }, []);
 
   return {

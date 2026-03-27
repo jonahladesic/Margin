@@ -1,9 +1,9 @@
 import { db } from "@workspace/db";
-import { projectsTable, phasesTable } from "@workspace/db/schema";
+import { projectsTable, phasesTable, usersTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
-const RSM_INTERNAL_COLOR = "#16a34a";
+const RSM_INTERNAL_COLOR = "#E8772E";
 const RSM_INTERNAL_PHASES = [
   "PTO",
   "Weekly WOW",
@@ -11,6 +11,60 @@ const RSM_INTERNAL_PHASES = [
   "Training",
   "Other",
 ];
+
+/** Seed test users for dev-mode role switching */
+const TEST_USERS = [
+  {
+    id: "user-admin-001",
+    replitId: "admin-001",
+    username: "admin",
+    firstName: "Alex",
+    lastName: "Morgan",
+    email: "alex@rsmdesign.com",
+    role: "admin" as const,
+  },
+  {
+    id: "user-pm-001",
+    replitId: "pm-001",
+    username: "sarah.pm",
+    firstName: "Sarah",
+    lastName: "Chen",
+    email: "sarah@rsmdesign.com",
+    role: "pm" as const,
+  },
+  {
+    id: "user-designer-001",
+    replitId: "designer-001",
+    username: "james.designer",
+    firstName: "James",
+    lastName: "Rivera",
+    email: "james@rsmdesign.com",
+    role: "designer" as const,
+  },
+  {
+    id: "user-designer-002",
+    replitId: "designer-002",
+    username: "maya.designer",
+    firstName: "Maya",
+    lastName: "Patel",
+    email: "maya@rsmdesign.com",
+    role: "designer" as const,
+  },
+];
+
+export async function seedTestUsers() {
+  for (const user of TEST_USERS) {
+    const existing = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.id, user.id))
+      .limit(1);
+    if (existing.length === 0) {
+      await db.insert(usersTable).values(user);
+      console.log(`Seeded test user: ${user.firstName} ${user.lastName} (${user.role})`);
+    }
+  }
+}
 
 export async function seedRSMInternal() {
   let existing = await db

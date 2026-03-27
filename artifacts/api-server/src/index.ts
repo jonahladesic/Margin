@@ -1,5 +1,10 @@
 import app from "./app";
-import { seedRSMInternal } from "./seed";
+import { seedRSMInternal, seedTestUsers } from "./seed";
+
+// Prevent Neon idle-disconnect or transient DB errors from crashing the server
+process.on("unhandledRejection", (reason) => {
+  console.error("[server] Unhandled rejection (non-fatal):", reason);
+});
 
 const rawPort = process.env["PORT"];
 
@@ -17,5 +22,8 @@ if (Number.isNaN(port) || port <= 0) {
 
 app.listen(port, () => {
   console.log(`Server listening on port ${port}`);
-  seedRSMInternal().catch((err) => console.error("Seed error:", err));
+  Promise.all([
+    seedRSMInternal(),
+    seedTestUsers(),
+  ]).catch((err) => console.error("Seed error:", err));
 });

@@ -12,7 +12,7 @@ import { randomUUID } from "crypto";
 const router: IRouter = Router();
 
 async function formatTimeBlock(tb: typeof timeBlocksTable.$inferSelect) {
-  const user = await db.select().from(usersTable).where(eq(usersTable.id, tb.userId)).limit(1);
+  const user = tb.userId ? await db.select().from(usersTable).where(eq(usersTable.id, tb.userId)).limit(1) : [];
   const project = await db
     .select()
     .from(projectsTable)
@@ -41,6 +41,9 @@ async function formatTimeBlock(tb: typeof timeBlocksTable.$inferSelect) {
     title: tb.title,
     description: tb.description,
     approved: tb.approved,
+    recurrenceRule: tb.recurrenceRule,
+    seriesId: tb.seriesId,
+    meetingId: tb.meetingId,
     createdAt: tb.createdAt.toISOString(),
   };
 }

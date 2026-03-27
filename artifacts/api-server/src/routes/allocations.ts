@@ -19,6 +19,7 @@ async function formatAllocation(a: typeof allocationsTable.$inferSelect) {
     ? await db.select().from(phasesTable).where(eq(phasesTable.id, a.phaseId)).limit(1)
     : [];
   const loggedConditions: ReturnType<typeof eq>[] = [
+    eq(timeBlocksTable.userId, a.userId),
     eq(timeBlocksTable.projectId, a.projectId),
     gte(timeBlocksTable.date, a.startDate),
     lte(timeBlocksTable.date, a.endDate),

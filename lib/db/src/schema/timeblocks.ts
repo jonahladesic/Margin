@@ -28,6 +28,9 @@ export const timeBlocksTable = pgTable("time_blocks", {
   description: text("description"),
   startTime: numeric("start_time", { precision: 5, scale: 2 }),
   approved: boolean("approved").notNull().default(false),
+  recurrenceRule: text("recurrence_rule"),
+  seriesId: text("series_id"),
+  meetingId: text("meeting_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

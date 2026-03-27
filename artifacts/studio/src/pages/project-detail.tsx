@@ -50,7 +50,7 @@ function NTPBadge({ received }: { received: boolean }) {
 function PaymentBadge({ status }: { status: string }) {
   const m: Record<string, string> = {
     paid:    "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
-    partial: "bg-blue-500/10 text-blue-500 border-blue-500/20",
+    partial: "bg-orange-500/10 text-orange-500 border-orange-500/20",
     unpaid:  "bg-red-500/10 text-red-500 border-red-500/20",
   };
   const labels: Record<string, string> = { paid: "Paid", partial: "Partial Payment", unpaid: "Unpaid" };
@@ -70,7 +70,7 @@ function WorkStatusBadge({ status }: { status: string }) {
     );
   }
   return (
-    <Badge variant="outline" className="gap-1.5 bg-sky-500/10 text-sky-400 border-sky-500/20">
+    <Badge variant="outline" className="gap-1.5 bg-orange-500/10 text-orange-400 border-orange-500/20">
       <Briefcase className="h-3.5 w-3.5" /> Working Internally
     </Badge>
   );
@@ -129,7 +129,7 @@ function PhaseCard({
             </span>
             <Badge variant="outline" className={`text-[10px] px-1.5 border-transparent ${
               phase.status === "completed" ? "bg-emerald-500/10 text-emerald-500" :
-              phase.status === "in_progress" ? "bg-blue-500/10 text-blue-500" :
+              phase.status === "in_progress" ? "bg-orange-500/10 text-orange-500" :
               "bg-muted text-muted-foreground"
             }`}>
               {phase.status?.replace("_", " ")}

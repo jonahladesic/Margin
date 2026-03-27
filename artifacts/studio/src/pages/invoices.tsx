@@ -21,11 +21,11 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 
-const PROJECT_COLORS = ["#4f46e5","#0ea5e9","#10b981","#f59e0b","#ef4444","#8b5cf6","#ec4899","#14b8a6"];
+const PROJECT_COLORS = ["#f97316","#E8772E","#10b981","#f59e0b","#ef4444","#8b5cf6","#ec4899","#14b8a6"];
 
 const DEFAULT_PROJ = {
   name: "", clientId: "", type: "branding", budgetedHours: "100",
-  budgetAmount: "10000", color: "#4f46e5", ntpReceived: false,
+  budgetAmount: "10000", color: "#f97316", ntpReceived: false,
   ntpDate: "", paymentStatus: "unpaid",
 };
 
@@ -84,7 +84,7 @@ export default function Invoices() {
   const getStatusBadge = (status: string) => {
     const m: Record<string, string> = {
       paid:    "bg-emerald-500/10 text-emerald-500",
-      sent:    "bg-blue-500/10 text-blue-500",
+      sent:    "bg-orange-500/10 text-orange-500",
       overdue: "bg-destructive/10 text-destructive",
       draft:   "bg-muted text-muted-foreground",
     };
