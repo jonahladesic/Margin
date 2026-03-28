@@ -21,7 +21,7 @@ if (process.env.NODE_ENV === "production") {
   const staticPath = path.resolve(process.cwd(), "artifacts/studio/dist/public");
   app.use(express.static(staticPath));
   // Client-side routing fallback — serve index.html for all non-API routes
-  app.get("*", (_req, res) => {
+  app.get("/{*splat}", (_req, res) => {
     res.sendFile(path.join(staticPath, "index.html"));
   });
 }
