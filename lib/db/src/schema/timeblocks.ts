@@ -31,6 +31,7 @@ export const timeBlocksTable = pgTable("time_blocks", {
   recurrenceRule: text("recurrence_rule"),
   seriesId: text("series_id"),
   meetingId: text("meeting_id"),
+  coreTimeEntryId: text("core_time_entry_id").unique(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

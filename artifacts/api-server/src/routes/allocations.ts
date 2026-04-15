@@ -40,6 +40,7 @@ async function formatAllocation(a: typeof allocationsTable.$inferSelect) {
     projectId: a.projectId,
     projectName: project[0]?.name ?? "Unknown",
     projectColor: project[0]?.color ?? null,
+    billingCategory: project[0]?.billingCategory ?? "billable",
     phaseId: a.phaseId,
     phaseName: phase[0]?.name ?? null,
     allocatedHours: parseFloat(a.allocatedHours),

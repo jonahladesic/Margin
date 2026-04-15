@@ -37,6 +37,11 @@ export const workStatusEnum = pgEnum("work_status", [
   "awaiting_client",
 ]);
 
+export const billingCategoryEnum = pgEnum("billing_category", [
+  "billable",
+  "overhead",
+]);
+
 export const memberRoleEnum = pgEnum("member_role", [
   "lead",
   "designer",
@@ -60,7 +65,10 @@ export const projectsTable = pgTable("projects", {
   ntpReceived: boolean("ntp_received").notNull().default(false),
   ntpDate: date("ntp_date"),
   paymentStatus: paymentStatusEnum("payment_status").notNull().default("unpaid"),
+  billingCategory: billingCategoryEnum("billing_category").notNull().default("billable"),
   isInternal: boolean("is_internal").notNull().default(false),
+  coreProjectId: text("core_project_id").unique(),
+  coreProjectNumber: text("core_project_number"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

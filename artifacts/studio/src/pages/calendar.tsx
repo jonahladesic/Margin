@@ -853,13 +853,24 @@ export default function Calendar() {
   };
 
   const allocList = (allocations as any[]);
+  const billableAllocList = allocList.filter((a: any) => a.billingCategory !== "overhead");
+  const overheadAllocList = allocList.filter((a: any) => a.billingCategory === "overhead");
   const totalAllocated = allocList.reduce((s: number, a: any) => s + (a.allocatedHours || 0), 0);
   const totalLogged = allocList.reduce((s: number, a: any) => s + (a.loggedHours || 0), 0);
   const totalRemaining = totalAllocated - totalLogged;
 
+  // Calculate billable vs overhead hours from timeblocks
+  const totalBillableHours = (timeblocks as any[])
+    .filter((tb: any) => tb.billingCategory !== "overhead")
+    .reduce((s: number, tb: any) => s + (tb.hours || 0), 0);
+  const totalOverheadHours = (timeblocks as any[])
+    .filter((tb: any) => tb.billingCategory === "overhead")
+    .reduce((s: number, tb: any) => s + (tb.hours || 0), 0);
+  const overtimeHours = Math.max(totalLoggedThisWeek - 40, 0);
+
   // Unallocated but logged: time blocks in this week that don't match any formal allocation
   const allocatedKeys = new Set(allocList.map((a: any) => `${a.projectId}::${a.phaseId || ""}`));
-  const unallocMap = new Map<string, { projectId: string; projectName: string; projectColor: string; phaseName: string | null; loggedHours: number }>();
+  const unallocMap = new Map<string, { projectId: string; projectName: string; projectColor: string; phaseName: string | null; loggedHours: number; billingCategory: string }>();
   for (const tb of (timeblocks as any[])) {
     const key = `${tb.projectId}::${tb.phaseId || ""}`;
     if (!allocatedKeys.has(key)) {
@@ -870,12 +881,15 @@ export default function Calendar() {
           projectColor: tb.projectColor || "#6b7280",
           phaseName: tb.phaseName || null,
           loggedHours: 0,
+          billingCategory: tb.billingCategory || "billable",
         });
       }
       unallocMap.get(key)!.loggedHours += (tb.hours || 0);
     }
   }
   const unallocList = Array.from(unallocMap.values());
+  const unallocBillable = unallocList.filter((u) => u.billingCategory !== "overhead");
+  const unallocOverhead = unallocList.filter((u) => u.billingCategory === "overhead");
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -932,12 +946,25 @@ export default function Calendar() {
               </button>
             </div>
           )}
-          <div className="text-sm text-muted-foreground">
-            Week total: <span className="font-semibold text-foreground">{totalLoggedThisWeek}h</span>
-            <span className="text-muted-foreground"> / 40h</span>
+          <div className="flex items-center gap-3 text-sm text-muted-foreground">
+            <span>
+              Week total: <span className="font-semibold text-foreground">{totalLoggedThisWeek}h</span>
+              <span className="text-muted-foreground"> / 40h</span>
+            </span>
+            {totalBillableHours > 0 && (
+              <span className="text-xs">Billable: <span className="font-medium text-foreground">{totalBillableHours.toFixed(1)}h</span></span>
+            )}
+            {totalOverheadHours > 0 && (
+              <span className="text-xs">Overhead: <span className="font-medium text-foreground">{totalOverheadHours.toFixed(1)}h</span></span>
+            )}
+            {overtimeHours > 0 && (
+              <span className="text-xs font-semibold text-red-500 bg-red-500/10 px-2 py-0.5 rounded-full">
+                +{overtimeHours.toFixed(1)}h overtime
+              </span>
+            )}
           </div>
           <div className="w-32">
-            <Progress value={Math.min((totalLoggedThisWeek / 40) * 100, 100)} className="h-2" />
+            <Progress value={Math.min((totalLoggedThisWeek / 40) * 100, 100)} className={`h-2 ${overtimeHours > 0 ? "[&>div]:bg-red-500" : ""}`} />
           </div>
         </div>
       </div>
@@ -960,9 +987,14 @@ export default function Calendar() {
                   {totalAllocated}h allocated · {totalLogged.toFixed(1)}h logged
                 </span>
               )}
-              {unallocList.length > 0 && (
+              {unallocBillable.length > 0 && (
                 <span className="font-normal text-amber-500">
-                  · {unallocList.length} untracked
+                  · {unallocBillable.length} untracked
+                </span>
+              )}
+              {(overheadAllocList.length > 0 || unallocOverhead.length > 0) && (
+                <span className="font-normal text-slate-400">
+                  · {totalOverheadHours.toFixed(1)}h overhead
                 </span>
               )}
               {topBarOpen ? <ChevronUp className="h-3.5 w-3.5 shrink-0 ml-auto" /> : <ChevronDown className="h-3.5 w-3.5 shrink-0 ml-auto" />}
@@ -984,7 +1016,8 @@ export default function Calendar() {
                 <span className="text-xs text-muted-foreground italic">No allocations or logged time this week</span>
               ) : (
                 <>
-                  {allocList.map((alloc: any) => {
+                  {/* Billable allocations */}
+                  {billableAllocList.map((alloc: any) => {
                     const pct = alloc.allocatedHours > 0 ? Math.min((alloc.loggedHours / alloc.allocatedHours) * 100, 100) : 0;
                     const isOver = alloc.loggedHours > alloc.allocatedHours;
                     return (
@@ -1009,10 +1042,52 @@ export default function Calendar() {
                       </div>
                     );
                   })}
-                  {unallocList.length > 0 && allocList.length > 0 && (
+
+                  {/* Overhead allocations + unallocated overhead */}
+                  {(overheadAllocList.length > 0 || unallocOverhead.length > 0) && billableAllocList.length > 0 && (
                     <div className="w-px h-6 bg-border/60 self-center mx-1" />
                   )}
-                  {unallocList.map((u) => (
+                  {overheadAllocList.map((alloc: any) => {
+                    const pct = alloc.allocatedHours > 0 ? Math.min((alloc.loggedHours / alloc.allocatedHours) * 100, 100) : 0;
+                    return (
+                      <div
+                        key={alloc.id}
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs border-slate-500/30 bg-slate-500/8"
+                      >
+                        <span className="w-2 h-2 rounded-full shrink-0 bg-slate-400" />
+                        <span className="font-medium text-slate-400">
+                          {alloc.projectName}{alloc.phaseName ? ` · ${alloc.phaseName}` : ""}
+                        </span>
+                        <span className="text-[10px] tabular-nums text-muted-foreground">
+                          {alloc.loggedHours}h{alloc.allocatedHours > 0 ? ` / ${alloc.allocatedHours}h` : ""}
+                        </span>
+                        {alloc.allocatedHours > 0 && (
+                          <div className="w-12 h-1 rounded-full bg-muted/60 overflow-hidden">
+                            <div className="h-full rounded-full bg-slate-400" style={{ width: `${pct}%` }} />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {unallocOverhead.map((u) => (
+                    <div
+                      key={`oh-${u.projectId}::${u.phaseName || ""}`}
+                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-dashed text-xs border-slate-500/30"
+                      title="Overhead — no allocation needed"
+                    >
+                      <span className="w-2 h-2 rounded-full shrink-0 bg-slate-400 opacity-60" />
+                      <span className="text-slate-400">
+                        {u.projectName}{u.phaseName ? ` · ${u.phaseName}` : ""}
+                      </span>
+                      <span className="text-[10px] tabular-nums text-muted-foreground">{u.loggedHours.toFixed(1)}h</span>
+                    </div>
+                  ))}
+
+                  {/* Untracked billable */}
+                  {unallocBillable.length > 0 && (billableAllocList.length > 0 || overheadAllocList.length > 0 || unallocOverhead.length > 0) && (
+                    <div className="w-px h-6 bg-border/60 self-center mx-1" />
+                  )}
+                  {unallocBillable.map((u) => (
                     <div
                       key={`${u.projectId}::${u.phaseName || ""}`}
                       className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-dashed text-xs border-border/60"

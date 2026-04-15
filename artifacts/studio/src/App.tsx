@@ -11,6 +11,7 @@ import ProjectDetail from "@/pages/project-detail";
 import Resources from "@/pages/resources";
 import Invoices from "@/pages/invoices";
 import Expenses from "@/pages/expenses";
+import Settings from "@/pages/settings";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -92,6 +93,13 @@ function Router() {
         <Layout>
           <ErrorBoundary>
             <Expenses />
+          </ErrorBoundary>
+        </Layout>
+      </Route>
+      <Route path="/settings">
+        <Layout>
+          <ErrorBoundary>
+            <Settings />
           </ErrorBoundary>
         </Layout>
       </Route>

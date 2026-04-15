@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { CalendarDays, FolderKanban, Users, FileText, Receipt, ChevronDown, Check } from "lucide-react";
+import { CalendarDays, FolderKanban, Users, FileText, Receipt, Settings, ChevronDown, Check } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -104,6 +104,16 @@ export function AppSidebar() {
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+              {(isPM || isAdmin) && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={location.startsWith("/settings")}>
+                    <Link href="/settings">
+                      <Settings className="mr-2" />
+                      <span>Settings</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

@@ -11,6 +11,7 @@ import invoicesRouter from "./invoices";
 import expensesRouter from "./expenses";
 import breakBlocksRouter from "./break-blocks";
 import meetingsRouter from "./meetings";
+import bqeCoreRouter from "./bqe-core";
 
 const router: IRouter = Router();
 
@@ -26,5 +27,6 @@ router.use(invoicesRouter);
 router.use(expensesRouter);
 router.use(breakBlocksRouter);
 router.use(meetingsRouter);
+router.use(bqeCoreRouter);
 
 export default router;

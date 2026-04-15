@@ -22,6 +22,7 @@ export const phasesTable = pgTable("phases", {
   kickoffDate: date("kickoff_date"),
   deadlineDate: date("deadline_date"),
   pageTurnDate: date("page_turn_date"),
+  coreActivityId: text("core_activity_id").unique(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

@@ -23,6 +23,7 @@ export const invoicesTable = pgTable("invoices", {
   total: numeric("total", { precision: 12, scale: 2 }).notNull().default("0"),
   notes: text("notes"),
   lineItems: jsonb("line_items").notNull().default([]),
+  coreInvoiceId: text("core_invoice_id").unique(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

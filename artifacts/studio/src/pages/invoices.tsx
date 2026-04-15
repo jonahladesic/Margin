@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { format } from "date-fns";
-import { Plus, Download, FileText, CheckCircle2, FolderPlus } from "lucide-react";
+import { Plus, Download, FileText, CheckCircle2, FolderPlus, ArrowUpFromLine } from "lucide-react";
 import {
   useListInvoices, useUpdateInvoice, useCreateProject, useListClients,
 } from "@workspace/api-client-react";
@@ -169,12 +169,44 @@ export default function Invoices() {
                   <TableCell>{format(new Date(invoice.issueDate), "MMM d, yyyy")}</TableCell>
                   <TableCell>{format(new Date(invoice.dueDate), "MMM d, yyyy")}</TableCell>
                   <TableCell className="text-right font-bold tabular-nums">${invoice.total?.toLocaleString()}</TableCell>
-                  <TableCell>{getStatusBadge(invoice.status)}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-1.5">
+                      {getStatusBadge(invoice.status)}
+                      {invoice.coreInvoiceId && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 bg-blue-500/10 text-blue-400 border-blue-500/20">BQE</Badge>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
                       <Button variant="ghost" size="icon" title="Download PDF">
                         <Download className="h-4 w-4" />
                       </Button>
+                      {!invoice.coreInvoiceId && (
+                        <Button
+                          variant="ghost" size="icon" title="Send to BQE Core"
+                          onClick={async () => {
+                            try {
+                              const res = await fetch("/api/bqe/invoices/create", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ invoiceId: invoice.id }),
+                              });
+                              const data = await res.json();
+                              if (data.success) {
+                                toast({ title: "Sent to BQE Core" });
+                                queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+                              } else {
+                                toast({ title: "BQE Error", description: data.error, variant: "destructive" });
+                              }
+                            } catch {
+                              toast({ title: "Failed to send to BQE", variant: "destructive" });
+                            }
+                          }}
+                        >
+                          <ArrowUpFromLine className="h-4 w-4" />
+                        </Button>
+                      )}
                       {invoice.status === "draft" && (
                         <Button variant="outline" size="sm" onClick={() => handleStatusUpdate(invoice.id, "sent")}>
                           Mark Sent

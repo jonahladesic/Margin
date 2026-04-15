@@ -38,6 +38,7 @@ function formatProject(p: typeof projectsTable.$inferSelect, clientName: string 
     status: p.status,
     type: p.type,
     workStatus: p.workStatus,
+    billingCategory: p.billingCategory,
     isInternal: p.isInternal,
     budgetedHours: parseFloat(p.budgetedHours ?? "0"),
     loggedHours,
@@ -50,6 +51,8 @@ function formatProject(p: typeof projectsTable.$inferSelect, clientName: string 
     ntpReceived: p.ntpReceived,
     ntpDate: p.ntpDate,
     paymentStatus: p.paymentStatus,
+    coreProjectId: p.coreProjectId,
+    coreProjectNumber: p.coreProjectNumber,
     createdAt: p.createdAt.toISOString(),
   };
 }
@@ -102,7 +105,7 @@ router.post("/projects", async (req, res) => {
   const {
     name, clientId, status, type, workStatus, budgetedHours, budgetAmount,
     startDate, endDate, description, color,
-    ntpReceived, ntpDate, paymentStatus, phases,
+    ntpReceived, ntpDate, paymentStatus, billingCategory, phases,
   } = req.body;
   if (!name) {
     res.status(400).json({ error: "Name is required" });
@@ -133,6 +136,7 @@ router.post("/projects", async (req, res) => {
       ntpReceived: ntpReceived ?? false,
       ntpDate: ntpDate || null,
       paymentStatus: paymentStatus || "unpaid",
+      billingCategory: billingCategory || "billable",
     })
     .returning();
 
@@ -158,7 +162,7 @@ router.put("/projects/:id", async (req, res) => {
   const {
     name, clientId, status, type, workStatus, budgetedHours, budgetAmount,
     startDate, endDate, description, color,
-    ntpReceived, ntpDate, paymentStatus,
+    ntpReceived, ntpDate, paymentStatus, billingCategory,
   } = req.body;
   const updated = await db
     .update(projectsTable)
@@ -177,6 +181,7 @@ router.put("/projects/:id", async (req, res) => {
       ntpReceived: ntpReceived ?? undefined,
       ntpDate: ntpDate ?? undefined,
       paymentStatus: paymentStatus ?? undefined,
+      billingCategory: billingCategory ?? undefined,
       updatedAt: new Date(),
     })
     .where(eq(projectsTable.id, req.params.id))
@@ -233,6 +238,7 @@ router.get("/projects/:id/phases", async (req, res) => {
         kickoffDate: ph.kickoffDate,
         deadlineDate: ph.deadlineDate,
         pageTurnDate: ph.pageTurnDate,
+        coreActivityId: ph.coreActivityId,
         subPhaseTotals: Object.fromEntries(
           subPhaseTotals.map((s) => [s.subPhase ?? "unassigned", parseFloat(s.total)])
         ),

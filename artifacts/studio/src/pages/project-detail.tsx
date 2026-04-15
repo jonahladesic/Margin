@@ -833,6 +833,29 @@ export default function ProjectDetail() {
                 </div>
               </Card>
               <Card className="p-5 grid gap-4">
+                <h3 className="font-semibold">Billing Category</h3>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label>Project Type</Label>
+                    <p className="text-xs text-muted-foreground">Overhead hours are tracked but not against a budget.</p>
+                  </div>
+                  <div className="flex items-center gap-2 bg-muted/50 rounded-lg p-1">
+                    <button
+                      onClick={() => updateProject.mutate({ id: project!.id, data: { billingCategory: "billable" } as any }, { onSuccess: () => { toast({ title: "Updated to billable" }); queryClient.invalidateQueries({ queryKey: [`/api/projects/${id}`] }); } })}
+                      className={`text-xs px-3 py-1.5 rounded-md transition-colors ${(project as any).billingCategory !== "overhead" ? "bg-background shadow-sm font-semibold text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                    >
+                      Billable
+                    </button>
+                    <button
+                      onClick={() => updateProject.mutate({ id: project!.id, data: { billingCategory: "overhead" } as any }, { onSuccess: () => { toast({ title: "Updated to overhead" }); queryClient.invalidateQueries({ queryKey: [`/api/projects/${id}`] }); } })}
+                      className={`text-xs px-3 py-1.5 rounded-md transition-colors ${(project as any).billingCategory === "overhead" ? "bg-background shadow-sm font-semibold text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                    >
+                      Overhead
+                    </button>
+                  </div>
+                </div>
+              </Card>
+              <Card className="p-5 grid gap-4">
                 <h3 className="font-semibold">Billing Controls</h3>
                 <div className="flex items-center justify-between">
                   <div>

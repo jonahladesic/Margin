@@ -47,6 +47,7 @@ async function formatInvoice(inv: typeof invoicesTable.$inferSelect) {
     total: parseFloat(inv.total),
     notes: inv.notes,
     lineItems,
+    coreInvoiceId: inv.coreInvoiceId,
     createdAt: inv.createdAt.toISOString(),
   };
 }

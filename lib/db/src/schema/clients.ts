@@ -8,6 +8,7 @@ export const clientsTable = pgTable("clients", {
   email: text("email"),
   phone: text("phone"),
   address: text("address"),
+  coreClientId: text("core_client_id").unique(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

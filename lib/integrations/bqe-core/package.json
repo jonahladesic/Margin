@@ -1,0 +1,14 @@
+{
+  "name": "@workspace/bqe-core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@workspace/db": "workspace:*",
+    "axios": "^1.7.0",
+    "drizzle-orm": "catalog:"
+  }
+}

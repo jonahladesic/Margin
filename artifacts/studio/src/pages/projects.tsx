@@ -85,6 +85,7 @@ const DEFAULT_FORM = {
   workStatus: "working_internally",
   budgetAmount: "10000", color: PROJECT_COLORS[0],
   ntpReceived: false, ntpDate: "", paymentStatus: "unpaid",
+  billingCategory: "billable",
 };
 
 function getUniqueColor(allProjectColors: string[]): string {
@@ -190,6 +191,7 @@ export default function Projects() {
           ntpReceived: formData.ntpReceived,
           ntpDate: formData.ntpDate || undefined,
           paymentStatus: formData.paymentStatus as any,
+          billingCategory: formData.billingCategory as any,
           phases: phases.map((p) => ({ name: p.name, budgetedHours: parseFloat(p.budgetedHours) || 0 })),
         } as any,
       },
@@ -316,6 +318,26 @@ export default function Projects() {
                         );
                       })}
                     </div>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between py-1">
+                  <div>
+                    <Label>Billing Category</Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">Overhead hours are tracked but not against a budget.</p>
+                  </div>
+                  <div className="flex items-center gap-2 bg-muted/50 rounded-lg p-1">
+                    <button
+                      onClick={() => set("billingCategory", "billable")}
+                      className={`text-xs px-3 py-1.5 rounded-md transition-colors ${formData.billingCategory === "billable" ? "bg-background shadow-sm font-semibold text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                    >
+                      Billable
+                    </button>
+                    <button
+                      onClick={() => set("billingCategory", "overhead")}
+                      className={`text-xs px-3 py-1.5 rounded-md transition-colors ${formData.billingCategory === "overhead" ? "bg-background shadow-sm font-semibold text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                    >
+                      Overhead
+                    </button>
                   </div>
                 </div>
               </div>
@@ -577,7 +599,10 @@ export default function Projects() {
                             <Pencil className="h-3.5 w-3.5" />
                           </button>
                         </div>
-                        <p className="text-xs text-muted-foreground mt-0.5 truncate">{project.clientName || "Internal"}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                          {project.coreProjectNumber && <span className="font-mono mr-1">{project.coreProjectNumber}</span>}
+                          {project.clientName || "Internal"}
+                        </p>
                       </div>
                       <Badge variant="outline" className={`shrink-0 text-[10px] px-1.5 border-transparent ${statusColor(project.status)}`}>
                         {project.status.replace("_", " ").toUpperCase()}
@@ -585,6 +610,16 @@ export default function Projects() {
                     </div>
 
                     <div className="flex flex-wrap gap-1.5">
+                      {project.coreProjectId && (
+                        <Badge variant="outline" className="gap-1 bg-blue-500/10 text-blue-400 border-blue-500/20 text-[10px] px-1.5">
+                          BQE
+                        </Badge>
+                      )}
+                      {project.billingCategory === "overhead" && (
+                        <Badge variant="outline" className="gap-1 bg-slate-500/10 text-slate-400 border-slate-500/20 text-[10px] px-1.5">
+                          Overhead
+                        </Badge>
+                      )}
                       <NTPBadge received={project.ntpReceived} />
                       <PaymentBadge status={project.paymentStatus} />
                       <WorkStatusBadge status={project.workStatus || "working_internally"} />

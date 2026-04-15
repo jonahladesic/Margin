@@ -30,6 +30,7 @@ async function formatTimeBlock(tb: typeof timeBlocksTable.$inferSelect) {
     projectId: tb.projectId,
     projectName: project[0]?.name ?? "Unknown",
     projectColor: project[0]?.color ?? null,
+    billingCategory: project[0]?.billingCategory ?? "billable",
     phaseId: tb.phaseId,
     phaseName: phase[0]?.name ?? null,
     subPhase: tb.subPhase,
@@ -44,6 +45,7 @@ async function formatTimeBlock(tb: typeof timeBlocksTable.$inferSelect) {
     recurrenceRule: tb.recurrenceRule,
     seriesId: tb.seriesId,
     meetingId: tb.meetingId,
+    coreTimeEntryId: tb.coreTimeEntryId,
     createdAt: tb.createdAt.toISOString(),
   };
 }
