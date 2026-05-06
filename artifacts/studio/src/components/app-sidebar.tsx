@@ -119,58 +119,77 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter className="p-4">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button className="flex items-center gap-3 w-full p-2 -m-2 rounded-lg hover:bg-muted/60 transition-colors text-left">
-              <Avatar className="h-9 w-9 border border-border">
-                <AvatarFallback className="text-xs font-semibold">
-                  {user ? getInitials(user.firstName, user.lastName) : "?"}
-                </AvatarFallback>
-              </Avatar>
-              <div className="flex flex-col flex-1 overflow-hidden">
-                <span className="text-sm font-medium truncate">{displayName}</span>
-                <Badge
-                  variant="outline"
-                  className={`w-fit text-[10px] mt-0.5 px-1.5 py-0 border ${ROLE_COLORS[user?.role ?? "designer"]}`}
-                >
-                  {ROLE_LABELS[user?.role ?? "designer"]}
-                </Badge>
-              </div>
-              <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" side="top" className="w-64">
-            <DropdownMenuLabel className="text-xs text-muted-foreground font-normal">
-              Switch User (Dev Mode)
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {allUsers.map((u) => (
-              <DropdownMenuItem
-                key={u.id}
-                onClick={() => switchUser(u.id)}
-                disabled={isSwitching}
-                className="flex items-center gap-3 py-2"
-              >
-                <Avatar className="h-7 w-7 border border-border">
-                  <AvatarFallback className="text-[10px] font-semibold">
-                    {getInitials(u.firstName, u.lastName)}
+        {import.meta.env.DEV ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="flex items-center gap-3 w-full p-2 -m-2 rounded-lg hover:bg-muted/60 transition-colors text-left">
+                <Avatar className="h-9 w-9 border border-border">
+                  <AvatarFallback className="text-xs font-semibold">
+                    {user ? getInitials(user.firstName, user.lastName) : "?"}
                   </AvatarFallback>
                 </Avatar>
-                <div className="flex flex-col flex-1 min-w-0">
-                  <span className="text-sm font-medium truncate">
-                    {`${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() || u.username}
-                  </span>
-                  <span className={`text-[10px] ${u.role === "pm" ? "text-blue-400" : u.role === "admin" ? "text-primary" : "text-emerald-400"}`}>
-                    {ROLE_LABELS[u.role]}
-                  </span>
+                <div className="flex flex-col flex-1 overflow-hidden">
+                  <span className="text-sm font-medium truncate">{displayName}</span>
+                  <Badge
+                    variant="outline"
+                    className={`w-fit text-[10px] mt-0.5 px-1.5 py-0 border ${ROLE_COLORS[user?.role ?? "designer"]}`}
+                  >
+                    {ROLE_LABELS[user?.role ?? "designer"]}
+                  </Badge>
                 </div>
-                {user?.id === u.id && (
-                  <Check className="h-4 w-4 text-primary shrink-0" />
-                )}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+                <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" side="top" className="w-64">
+              <DropdownMenuLabel className="text-xs text-muted-foreground font-normal">
+                Switch User (Dev Mode)
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {allUsers.map((u) => (
+                <DropdownMenuItem
+                  key={u.id}
+                  onClick={() => switchUser(u.id)}
+                  disabled={isSwitching}
+                  className="flex items-center gap-3 py-2"
+                >
+                  <Avatar className="h-7 w-7 border border-border">
+                    <AvatarFallback className="text-[10px] font-semibold">
+                      {getInitials(u.firstName, u.lastName)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex flex-col flex-1 min-w-0">
+                    <span className="text-sm font-medium truncate">
+                      {`${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() || u.username}
+                    </span>
+                    <span className={`text-[10px] ${u.role === "pm" ? "text-blue-400" : u.role === "admin" ? "text-primary" : "text-emerald-400"}`}>
+                      {ROLE_LABELS[u.role]}
+                    </span>
+                  </div>
+                  {user?.id === u.id && (
+                    <Check className="h-4 w-4 text-primary shrink-0" />
+                  )}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <div className="flex items-center gap-3 w-full p-2 -m-2">
+            <Avatar className="h-9 w-9 border border-border">
+              <AvatarFallback className="text-xs font-semibold">
+                {user ? getInitials(user.firstName, user.lastName) : "?"}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex flex-col flex-1 overflow-hidden">
+              <span className="text-sm font-medium truncate">{displayName}</span>
+              <Badge
+                variant="outline"
+                className={`w-fit text-[10px] mt-0.5 px-1.5 py-0 border ${ROLE_COLORS[user?.role ?? "designer"]}`}
+              >
+                {ROLE_LABELS[user?.role ?? "designer"]}
+              </Badge>
+            </div>
+          </div>
+        )}
       </SidebarFooter>
     </Sidebar>
   );

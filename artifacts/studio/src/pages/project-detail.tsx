@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams, Link } from "wouter";
+import { useParams, Link, useLocation } from "wouter";
 import { format } from "date-fns";
 import {
   ChevronLeft, FileCheck, DollarSign, Clock, Plus, Check, X,
@@ -23,6 +23,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 
 const SUB_PHASES = ["Project", "Design", "Meetings", "Internal Meetings"];
@@ -232,6 +237,7 @@ function PhaseCard({
 
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
+  const [, navigate] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -874,6 +880,49 @@ export default function ProjectDetail() {
                       <SelectItem value="paid">Paid</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+              </Card>
+              <Card className="p-5 grid gap-4 border-destructive/30">
+                <h3 className="font-semibold text-destructive">Danger Zone</h3>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label>Delete Project</Label>
+                    <p className="text-xs text-muted-foreground">Permanently delete this project and all its data.</p>
+                  </div>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="destructive" size="sm">
+                        <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                        Delete Project
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Delete "{project?.name}"?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This will permanently delete this project along with all its phases, time entries, allocations, invoices, and expenses. This action cannot be undone.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                          onClick={async () => {
+                            try {
+                              await fetch(`/api/projects/${id}`, { method: "DELETE" });
+                              toast({ title: "Project deleted" });
+                              queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+                              navigate("/projects");
+                            } catch {
+                              toast({ title: "Failed to delete project", variant: "destructive" });
+                            }
+                          }}
+                        >
+                          Delete Project
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </div>
               </Card>
             </div>

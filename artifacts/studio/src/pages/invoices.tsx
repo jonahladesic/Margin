@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { format } from "date-fns";
-import { Plus, Download, FileText, CheckCircle2, FolderPlus, ArrowUpFromLine } from "lucide-react";
+import { Plus, Download, FileText, CheckCircle2, FolderPlus, ArrowUpFromLine, Trash2 } from "lucide-react";
 import {
   useListInvoices, useUpdateInvoice, useCreateProject, useListClients,
+  useCreateInvoice, useListProjects,
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -18,6 +19,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -33,13 +39,105 @@ export default function Invoices() {
   const [filter, setFilter] = useState("all");
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [projForm, setProjForm] = useState({ ...DEFAULT_PROJ });
+  const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
+  const [deleteInvoiceId, setDeleteInvoiceId] = useState<string | null>(null);
+
+  const DEFAULT_LINE_ITEM = { description: "", quantity: "1", unitPrice: "" };
+  const DEFAULT_INVOICE = {
+    projectId: "", issueDate: format(new Date(), "yyyy-MM-dd"),
+    dueDate: "", taxRate: "0", notes: "",
+    lineItems: [{ ...DEFAULT_LINE_ITEM }],
+  };
+  const [invoiceForm, setInvoiceForm] = useState({ ...DEFAULT_INVOICE });
 
   const { data: invoices = [], isLoading } = useListInvoices();
   const { data: clients = [] } = useListClients();
+  const { data: projects = [] } = useListProjects();
   const updateInvoice = useUpdateInvoice();
   const createProject = useCreateProject();
+  const createInvoice = useCreateInvoice();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // ── Invoice form helpers ──
+  const setInv = (k: string, v: any) => setInvoiceForm((f) => ({ ...f, [k]: v }));
+
+  const updateLineItem = (idx: number, field: string, value: string) => {
+    setInvoiceForm((f) => ({
+      ...f,
+      lineItems: f.lineItems.map((item, i) => i === idx ? { ...item, [field]: value } : item),
+    }));
+  };
+
+  const addLineItem = () => {
+    setInvoiceForm((f) => ({ ...f, lineItems: [...f.lineItems, { ...DEFAULT_LINE_ITEM }] }));
+  };
+
+  const removeLineItem = (idx: number) => {
+    setInvoiceForm((f) => ({
+      ...f,
+      lineItems: f.lineItems.length > 1 ? f.lineItems.filter((_, i) => i !== idx) : f.lineItems,
+    }));
+  };
+
+  const invoiceTotals = useMemo(() => {
+    const subtotal = invoiceForm.lineItems.reduce((sum, item) => {
+      return sum + (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0);
+    }, 0);
+    const taxRate = Number(invoiceForm.taxRate) || 0;
+    const taxAmount = subtotal * (taxRate / 100);
+    return { subtotal, taxAmount, total: subtotal + taxAmount };
+  }, [invoiceForm.lineItems, invoiceForm.taxRate]);
+
+  const handleCreateInvoice = () => {
+    if (!invoiceForm.projectId || !invoiceForm.issueDate || !invoiceForm.dueDate) {
+      toast({ title: "Please fill in project, issue date, and due date", variant: "destructive" });
+      return;
+    }
+    if (invoiceForm.lineItems.every((li) => !li.description && !li.unitPrice)) {
+      toast({ title: "Add at least one line item", variant: "destructive" });
+      return;
+    }
+    createInvoice.mutate(
+      {
+        data: {
+          projectId: invoiceForm.projectId,
+          issueDate: invoiceForm.issueDate,
+          dueDate: invoiceForm.dueDate,
+          taxRate: Number(invoiceForm.taxRate) || 0,
+          notes: invoiceForm.notes || undefined,
+          lineItems: invoiceForm.lineItems
+            .filter((li) => li.description || li.unitPrice)
+            .map((li) => ({
+              description: li.description,
+              quantity: Number(li.quantity) || 1,
+              unitPrice: Number(li.unitPrice) || 0,
+            })),
+        } as any,
+      },
+      {
+        onSuccess: () => {
+          toast({ title: "Invoice created" });
+          setInvoiceDialogOpen(false);
+          setInvoiceForm({ ...DEFAULT_INVOICE, lineItems: [{ ...DEFAULT_LINE_ITEM }] });
+          queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+        },
+        onError: () => toast({ title: "Failed to create invoice", variant: "destructive" }),
+      }
+    );
+  };
+
+  const handleDeleteInvoice = async () => {
+    if (!deleteInvoiceId) return;
+    try {
+      await fetch(`/api/invoices/${deleteInvoiceId}`, { method: "DELETE" });
+      toast({ title: "Invoice deleted" });
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+    } catch {
+      toast({ title: "Failed to delete invoice", variant: "destructive" });
+    }
+    setDeleteInvoiceId(null);
+  };
 
   const setP = (k: string, v: any) => setProjForm((f) => ({ ...f, [k]: v }));
 
@@ -109,7 +207,7 @@ export default function Invoices() {
             <FolderPlus className="mr-2 h-4 w-4" />
             New Project
           </Button>
-          <Button>
+          <Button onClick={() => setInvoiceDialogOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
             Create Invoice
           </Button>
@@ -152,7 +250,7 @@ export default function Invoices() {
                   <div className="flex flex-col items-center gap-3 text-muted-foreground">
                     <FileText className="h-10 w-10 opacity-20" />
                     <p>No invoices found</p>
-                    <Button variant="outline" size="sm">
+                    <Button variant="outline" size="sm" onClick={() => setInvoiceDialogOpen(true)}>
                       <Plus className="mr-2 h-4 w-4" />Create Invoice
                     </Button>
                   </div>
@@ -179,7 +277,7 @@ export default function Invoices() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
-                      <Button variant="ghost" size="icon" title="Download PDF">
+                      <Button variant="ghost" size="icon" title="Download PDF" onClick={() => window.open(`/api/invoices/${invoice.id}/pdf`, '_blank')}>
                         <Download className="h-4 w-4" />
                       </Button>
                       {!invoice.coreInvoiceId && (
@@ -222,6 +320,14 @@ export default function Invoices() {
                           Mark Paid
                         </Button>
                       )}
+                      <Button
+                        variant="ghost" size="icon"
+                        className="text-muted-foreground hover:text-destructive"
+                        title="Delete invoice"
+                        onClick={() => setDeleteInvoiceId(invoice.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -321,6 +427,162 @@ export default function Invoices() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── Create Invoice Dialog ── */}
+      <Dialog open={invoiceDialogOpen} onOpenChange={setInvoiceDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Create Invoice</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            {/* Project selector */}
+            <div className="grid gap-2">
+              <Label>Project *</Label>
+              <Select value={invoiceForm.projectId || "none"} onValueChange={(v) => setInv("projectId", v === "none" ? "" : v)}>
+                <SelectTrigger><SelectValue placeholder="Select a project" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Select a project</SelectItem>
+                  {(projects as any[]).map((p: any) => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Dates */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-2">
+                <Label>Issue Date *</Label>
+                <Input type="date" value={invoiceForm.issueDate} onChange={(e) => setInv("issueDate", e.target.value)} />
+              </div>
+              <div className="grid gap-2">
+                <Label>Due Date *</Label>
+                <Input type="date" value={invoiceForm.dueDate} onChange={(e) => setInv("dueDate", e.target.value)} />
+              </div>
+            </div>
+
+            {/* Line items */}
+            <div className="grid gap-2">
+              <Label>Line Items</Label>
+              <div className="border rounded-md overflow-hidden">
+                <div className="grid grid-cols-[1fr_80px_100px_100px_40px] gap-2 px-3 py-2 bg-muted/30 text-xs font-medium text-muted-foreground uppercase">
+                  <span>Description</span>
+                  <span>Qty</span>
+                  <span>Unit Price</span>
+                  <span className="text-right">Amount</span>
+                  <span />
+                </div>
+                {invoiceForm.lineItems.map((item, idx) => (
+                  <div key={idx} className="grid grid-cols-[1fr_80px_100px_100px_40px] gap-2 px-3 py-1.5 border-t items-center">
+                    <Input
+                      placeholder="Service description"
+                      value={item.description}
+                      onChange={(e) => updateLineItem(idx, "description", e.target.value)}
+                      className="h-8 text-sm"
+                    />
+                    <Input
+                      type="number" min="1"
+                      value={item.quantity}
+                      onChange={(e) => updateLineItem(idx, "quantity", e.target.value)}
+                      className="h-8 text-sm"
+                    />
+                    <Input
+                      type="number" min="0" step="0.01"
+                      placeholder="0.00"
+                      value={item.unitPrice}
+                      onChange={(e) => updateLineItem(idx, "unitPrice", e.target.value)}
+                      className="h-8 text-sm"
+                    />
+                    <div className="text-right text-sm font-medium tabular-nums pr-1">
+                      ${((Number(item.quantity) || 0) * (Number(item.unitPrice) || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                    <button
+                      onClick={() => removeLineItem(idx)}
+                      className="text-muted-foreground hover:text-destructive transition-colors disabled:opacity-30"
+                      disabled={invoiceForm.lineItems.length <= 1}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <Button variant="outline" size="sm" onClick={addLineItem} className="w-fit mt-1">
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                Add Line Item
+              </Button>
+            </div>
+
+            {/* Tax rate */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-2">
+                <Label>Tax Rate (%)</Label>
+                <Input
+                  type="number" min="0" max="100" step="0.01"
+                  value={invoiceForm.taxRate}
+                  onChange={(e) => setInv("taxRate", e.target.value)}
+                />
+              </div>
+              <div />
+            </div>
+
+            {/* Notes */}
+            <div className="grid gap-2">
+              <Label>Notes</Label>
+              <Textarea
+                placeholder="Payment terms, notes, etc."
+                value={invoiceForm.notes}
+                onChange={(e) => setInv("notes", e.target.value)}
+                rows={2}
+              />
+            </div>
+
+            {/* Totals */}
+            <div className="border-t pt-3 flex flex-col items-end gap-1 text-sm">
+              <div className="flex gap-8">
+                <span className="text-muted-foreground">Subtotal</span>
+                <span className="font-medium tabular-nums w-24 text-right">${invoiceTotals.subtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
+              {Number(invoiceForm.taxRate) > 0 && (
+                <div className="flex gap-8">
+                  <span className="text-muted-foreground">Tax ({invoiceForm.taxRate}%)</span>
+                  <span className="font-medium tabular-nums w-24 text-right">${invoiceTotals.taxAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+              )}
+              <div className="flex gap-8 text-base font-bold border-t pt-1 mt-1">
+                <span>Total</span>
+                <span className="tabular-nums w-24 text-right">${invoiceTotals.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setInvoiceDialogOpen(false)}>Cancel</Button>
+            <Button
+              onClick={handleCreateInvoice}
+              disabled={createInvoice.isPending || !invoiceForm.projectId}
+            >
+              {createInvoice.isPending ? "Creating…" : "Create Invoice"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Delete Invoice Confirmation ── */}
+      <AlertDialog open={!!deleteInvoiceId} onOpenChange={(open) => !open && setDeleteInvoiceId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Invoice</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete this invoice. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteInvoice} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

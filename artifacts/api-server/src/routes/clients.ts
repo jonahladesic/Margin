@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { clientsTable } from "@workspace/db/schema";
+import { clientsTable, projectsTable } from "@workspace/db/schema";
+import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
 const router: IRouter = Router();
@@ -20,7 +21,6 @@ router.get("/clients", async (_req, res) => {
 });
 
 router.get("/clients/:id", async (req, res) => {
-  const { eq } = await import("drizzle-orm");
   const client = await db
     .select()
     .from(clientsTable)
@@ -63,7 +63,6 @@ router.post("/clients", async (req, res) => {
 });
 
 router.put("/clients/:id", async (req, res) => {
-  const { eq } = await import("drizzle-orm");
   const { name, email, phone, address } = req.body;
   const updated = await db
     .update(clientsTable)
@@ -83,6 +82,23 @@ router.put("/clients/:id", async (req, res) => {
     address: c.address,
     createdAt: c.createdAt.toISOString(),
   });
+});
+
+router.delete("/clients/:id", async (req, res) => {
+  // Guard: check for linked projects
+  const linkedProjects = await db
+    .select({ id: projectsTable.id })
+    .from(projectsTable)
+    .where(eq(projectsTable.clientId, req.params.id))
+    .limit(1);
+
+  if (linkedProjects.length > 0) {
+    res.status(400).json({ error: "Cannot delete client with linked projects. Remove or reassign projects first." });
+    return;
+  }
+
+  await db.delete(clientsTable).where(eq(clientsTable.id, req.params.id));
+  res.status(204).send();
 });
 
 export default router;

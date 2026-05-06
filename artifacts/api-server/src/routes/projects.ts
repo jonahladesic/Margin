@@ -6,6 +6,9 @@ import {
   phasesTable,
   timeBlocksTable,
   projectMembersTable,
+  invoicesTable,
+  allocationsTable,
+  expensesTable,
 } from "@workspace/db/schema";
 import { randomUUID } from "crypto";
 import { and, eq, sql } from "drizzle-orm";
@@ -346,6 +349,29 @@ router.delete("/projects/:id/members/:memberId", async (req, res) => {
     return;
   }
   res.status(204).end();
+});
+
+// ── Delete project (cascade) ──
+router.delete("/projects/:id", async (req, res) => {
+  const projectId = req.params.id;
+
+  // Verify project exists
+  const project = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId)).limit(1);
+  if (!project[0]) {
+    res.status(404).json({ error: "Project not found" });
+    return;
+  }
+
+  // Cascade delete in FK-safe order
+  await db.delete(expensesTable).where(eq(expensesTable.projectId, projectId));
+  await db.delete(timeBlocksTable).where(eq(timeBlocksTable.projectId, projectId));
+  await db.delete(allocationsTable).where(eq(allocationsTable.projectId, projectId));
+  await db.delete(projectMembersTable).where(eq(projectMembersTable.projectId, projectId));
+  await db.delete(invoicesTable).where(eq(invoicesTable.projectId, projectId));
+  await db.delete(phasesTable).where(eq(phasesTable.projectId, projectId));
+  await db.delete(projectsTable).where(eq(projectsTable.id, projectId));
+
+  res.status(204).send();
 });
 
 export default router;

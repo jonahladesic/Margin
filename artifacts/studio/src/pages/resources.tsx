@@ -1,23 +1,39 @@
 import { useState } from "react";
 import { format } from "date-fns";
 import { useAuth } from "@workspace/replit-auth-web";
-import { 
-  useListAllocations, 
-  useListTimeBlocks,
-  useListProjects 
+import {
+  useListAllocations, useListTimeBlocks, useListProjects,
+  useCreateAllocation, useListProjectPhases,
 } from "@workspace/api-client-react";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { startOfWeek, endOfWeek, addWeeks, subWeeks } from "date-fns";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
+
+const DEFAULT_ALLOC = {
+  projectId: "", phaseId: "", allocatedHours: "", startDate: "", endDate: "", notes: "",
+};
 
 export default function Resources() {
   const { user } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+  const [assignUserId, setAssignUserId] = useState("");
+  const [assignUserName, setAssignUserName] = useState("");
+  const [allocForm, setAllocForm] = useState({ ...DEFAULT_ALLOC });
 
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
   const weekEnd = endOfWeek(currentDate, { weekStartsOn: 1 });
@@ -25,6 +41,56 @@ export default function Resources() {
   const nextWeek = () => setCurrentDate(addWeeks(currentDate, 1));
   const prevWeek = () => setCurrentDate(subWeeks(currentDate, 1));
   const today = () => setCurrentDate(new Date());
+
+  const { data: projects = [] } = useListProjects();
+  const createAllocation = useCreateAllocation();
+
+  // Fetch phases for selected project
+  const { data: phases = [] } = useListProjectPhases(allocForm.projectId || "none", {
+    query: { enabled: !!allocForm.projectId } as any,
+  });
+
+  const setAlloc = (k: string, v: any) => setAllocForm((f) => ({ ...f, [k]: v }));
+
+  const openAssignDialog = (userId: string, userName: string) => {
+    setAssignUserId(userId);
+    setAssignUserName(userName);
+    setAllocForm({
+      ...DEFAULT_ALLOC,
+      startDate: format(weekStart, "yyyy-MM-dd"),
+      endDate: format(weekEnd, "yyyy-MM-dd"),
+    });
+    setAssignDialogOpen(true);
+  };
+
+  const handleCreateAllocation = () => {
+    if (!allocForm.projectId || !allocForm.allocatedHours || !allocForm.startDate || !allocForm.endDate) {
+      toast({ title: "Please fill in project, hours, and dates", variant: "destructive" });
+      return;
+    }
+    createAllocation.mutate(
+      {
+        data: {
+          userId: assignUserId,
+          projectId: allocForm.projectId,
+          phaseId: allocForm.phaseId || undefined,
+          allocatedHours: Number(allocForm.allocatedHours),
+          startDate: allocForm.startDate,
+          endDate: allocForm.endDate,
+          notes: allocForm.notes || undefined,
+        } as any,
+      },
+      {
+        onSuccess: () => {
+          toast({ title: `Hours assigned to ${assignUserName}` });
+          setAssignDialogOpen(false);
+          queryClient.invalidateQueries({ queryKey: ["/api/utilization"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/allocations"] });
+        },
+        onError: () => toast({ title: "Failed to create allocation", variant: "destructive" }),
+      }
+    );
+  };
 
   // Using custom fetch for utilization to match API endpoint since it might not be a generated hook
   const { data: utilizations = [], isLoading } = useQuery({
@@ -110,7 +176,11 @@ export default function Resources() {
                           {p.projectName} ({p.allocatedHours}h)
                         </div>
                       ))}
-                      <Button variant="outline" size="sm" className="h-6 text-xs px-2 no-default-hover-elevate">
+                      <Button
+                        variant="outline" size="sm"
+                        className="h-6 text-xs px-2 no-default-hover-elevate"
+                        onClick={() => openAssignDialog(u.userId, u.userName)}
+                      >
                         + Assign
                       </Button>
                     </div>
@@ -121,6 +191,88 @@ export default function Resources() {
           </div>
         )}
       </div>
+
+      {/* ── Assign Allocation Dialog ── */}
+      <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Assign Hours</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="grid gap-2">
+              <Label>Team Member</Label>
+              <Input value={assignUserName} disabled className="bg-muted/50" />
+            </div>
+            <div className="grid gap-2">
+              <Label>Project *</Label>
+              <Select
+                value={allocForm.projectId || "none"}
+                onValueChange={(v) => {
+                  setAlloc("projectId", v === "none" ? "" : v);
+                  setAlloc("phaseId", "");
+                }}
+              >
+                <SelectTrigger><SelectValue placeholder="Select a project" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Select a project</SelectItem>
+                  {(projects as any[]).map((p: any) => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {allocForm.projectId && (phases as any[]).length > 0 && (
+              <div className="grid gap-2">
+                <Label>Phase</Label>
+                <Select value={allocForm.phaseId || "none"} onValueChange={(v) => setAlloc("phaseId", v === "none" ? "" : v)}>
+                  <SelectTrigger><SelectValue placeholder="All phases" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">All phases</SelectItem>
+                    {(phases as any[]).map((ph: any) => (
+                      <SelectItem key={ph.id} value={ph.id}>{ph.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div className="grid gap-2">
+              <Label>Allocated Hours *</Label>
+              <Input
+                type="number" min="1" step="0.5" placeholder="e.g. 20"
+                value={allocForm.allocatedHours}
+                onChange={(e) => setAlloc("allocatedHours", e.target.value)}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-2">
+                <Label>Start Date *</Label>
+                <Input type="date" value={allocForm.startDate} onChange={(e) => setAlloc("startDate", e.target.value)} />
+              </div>
+              <div className="grid gap-2">
+                <Label>End Date *</Label>
+                <Input type="date" value={allocForm.endDate} onChange={(e) => setAlloc("endDate", e.target.value)} />
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label>Notes</Label>
+              <Input
+                placeholder="Optional notes"
+                value={allocForm.notes}
+                onChange={(e) => setAlloc("notes", e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAssignDialogOpen(false)}>Cancel</Button>
+            <Button
+              onClick={handleCreateAllocation}
+              disabled={createAllocation.isPending || !allocForm.projectId || !allocForm.allocatedHours}
+            >
+              {createAllocation.isPending ? "Assigning…" : "Assign Hours"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
