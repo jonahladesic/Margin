@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import {
   useGetProject, useListTimeBlocks, useListExpenses, useListInvoices,
-  useUpdateTimeBlock, useUpdateProject,
+  useUpdateTimeBlock, useUpdateProject, useListClients,
 } from "@workspace/api-client-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
@@ -28,6 +28,10 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 
 const SUB_PHASES = ["Project", "Design", "Meetings", "Internal Meetings"];
@@ -242,8 +246,11 @@ export default function ProjectDetail() {
   const queryClient = useQueryClient();
 
   const [viewRole, setViewRole] = useState<ViewRole>("lead");
+  const [editProjectOpen, setEditProjectOpen] = useState(false);
+  const [editForm, setEditForm] = useState<any>(null);
 
   const { data: project, isLoading: projectLoading } = useGetProject(id || "");
+  const { data: clients = [] } = useListClients();
   const { data: timeblocks = [] } = useListTimeBlocks({ request: { query: { projectId: id } } });
   const { data: expenses = [] } = useListExpenses({ request: { query: { projectId: id } } });
   const { data: invoices = [] } = useListInvoices({ request: { query: { projectId: id } } });
@@ -278,6 +285,57 @@ export default function ProjectDetail() {
   const [showAddMember, setShowAddMember] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState("");
+
+  const PROJECT_COLORS = ["#f97316","#E8772E","#10b981","#f59e0b","#ef4444","#8b5cf6","#ec4899","#14b8a6"];
+
+  const openEditProject = () => {
+    if (!project) return;
+    setEditForm({
+      name: (project as any).name || "",
+      clientId: (project as any).clientId || "",
+      type: (project as any).type || "branding",
+      status: (project as any).status || "active",
+      budgetedHours: String((project as any).budgetedHours ?? ""),
+      budgetAmount: String((project as any).budgetAmount ?? ""),
+      color: (project as any).color || "#f97316",
+      startDate: (project as any).startDate || "",
+      endDate: (project as any).endDate || "",
+      description: (project as any).description || "",
+    });
+    setEditProjectOpen(true);
+  };
+
+  const setEdit = (k: string, v: any) => setEditForm((f: any) => ({ ...f, [k]: v }));
+
+  const handleSaveProject = () => {
+    if (!editForm || !project) return;
+    updateProject.mutate(
+      {
+        id: (project as any).id,
+        data: {
+          name: editForm.name,
+          clientId: editForm.clientId || undefined,
+          type: editForm.type,
+          status: editForm.status,
+          budgetedHours: Number(editForm.budgetedHours) || undefined,
+          budgetAmount: Number(editForm.budgetAmount) || undefined,
+          color: editForm.color,
+          startDate: editForm.startDate || undefined,
+          endDate: editForm.endDate || undefined,
+          description: editForm.description || undefined,
+        } as any,
+      },
+      {
+        onSuccess: () => {
+          toast({ title: "Project updated" });
+          setEditProjectOpen(false);
+          queryClient.invalidateQueries({ queryKey: [`/api/projects/${id}`] });
+          queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+        },
+        onError: () => toast({ title: "Failed to update project", variant: "destructive" }),
+      }
+    );
+  };
 
   const addPhaseMutation = useMutation({
     mutationFn: async (data: { name: string; budgetedHours: number }) => {
@@ -458,6 +516,10 @@ export default function ProjectDetail() {
               </div>
             )}
             <Badge variant="outline" className="uppercase">{project.status?.replace("_", " ")}</Badge>
+            <Button variant="outline" size="sm" onClick={openEditProject} className="ml-2">
+              <Pencil className="mr-1.5 h-3.5 w-3.5" />
+              Edit
+            </Button>
           </div>
           {/* View as role selector */}
           <div className="flex items-center gap-2 border border-border rounded-md px-3 py-1.5 bg-muted/10">
@@ -929,6 +991,110 @@ export default function ProjectDetail() {
           </TabsContent>
         )}
       </Tabs>
+
+      {/* ── Edit Project Dialog ── */}
+      <Dialog open={editProjectOpen} onOpenChange={setEditProjectOpen}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Project</DialogTitle>
+          </DialogHeader>
+          {editForm && (
+            <div className="grid gap-4 py-2">
+              <div className="grid gap-2">
+                <Label>Project Name</Label>
+                <Input value={editForm.name} onChange={(e) => setEdit("name", e.target.value)} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-2">
+                  <Label>Client</Label>
+                  <Select value={editForm.clientId || "none"} onValueChange={(v) => setEdit("clientId", v === "none" ? "" : v)}>
+                    <SelectTrigger><SelectValue placeholder="No client" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No client</SelectItem>
+                      {(clients as any[]).map((c: any) => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-2">
+                  <Label>Type</Label>
+                  <Select value={editForm.type} onValueChange={(v) => setEdit("type", v)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {["branding","web","interior","architecture","other"].map((t) => (
+                        <SelectItem key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-2">
+                  <Label>Status</Label>
+                  <Select value={editForm.status} onValueChange={(v) => setEdit("status", v)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="on_hold">On Hold</SelectItem>
+                      <SelectItem value="completed">Completed</SelectItem>
+                      <SelectItem value="cancelled">Cancelled</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-2">
+                  <Label>Color</Label>
+                  <div className="flex gap-1.5 items-center h-9">
+                    {PROJECT_COLORS.map((c) => (
+                      <button
+                        key={c}
+                        className={`w-6 h-6 rounded-full border-2 transition-all ${editForm.color === c ? "border-foreground scale-110" : "border-transparent"}`}
+                        style={{ backgroundColor: c }}
+                        onClick={() => setEdit("color", c)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-2">
+                  <Label>Budget Hours</Label>
+                  <Input type="number" value={editForm.budgetedHours} onChange={(e) => setEdit("budgetedHours", e.target.value)} />
+                </div>
+                <div className="grid gap-2">
+                  <Label>Budget ($)</Label>
+                  <Input type="number" value={editForm.budgetAmount} onChange={(e) => setEdit("budgetAmount", e.target.value)} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-2">
+                  <Label>Start Date</Label>
+                  <Input type="date" value={editForm.startDate} onChange={(e) => setEdit("startDate", e.target.value)} />
+                </div>
+                <div className="grid gap-2">
+                  <Label>End Date</Label>
+                  <Input type="date" value={editForm.endDate} onChange={(e) => setEdit("endDate", e.target.value)} />
+                </div>
+              </div>
+              <div className="grid gap-2">
+                <Label>Description</Label>
+                <Textarea
+                  placeholder="Project description..."
+                  value={editForm.description}
+                  onChange={(e) => setEdit("description", e.target.value)}
+                  rows={3}
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditProjectOpen(false)}>Cancel</Button>
+            <Button onClick={handleSaveProject} disabled={updateProject.isPending || !editForm?.name}>
+              {updateProject.isPending ? "Saving…" : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

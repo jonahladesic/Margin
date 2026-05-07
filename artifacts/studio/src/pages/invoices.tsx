@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { format } from "date-fns";
-import { Plus, Download, FileText, CheckCircle2, FolderPlus, ArrowUpFromLine, Trash2 } from "lucide-react";
+import { Plus, Download, FileText, CheckCircle2, FolderPlus, ArrowUpFromLine, Trash2, Pencil } from "lucide-react";
 import {
   useListInvoices, useUpdateInvoice, useCreateProject, useListClients,
   useCreateInvoice, useListProjects,
@@ -41,6 +41,8 @@ export default function Invoices() {
   const [projForm, setProjForm] = useState({ ...DEFAULT_PROJ });
   const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
   const [deleteInvoiceId, setDeleteInvoiceId] = useState<string | null>(null);
+  const [editInvoiceId, setEditInvoiceId] = useState<string | null>(null);
+  const [editInvoiceForm, setEditInvoiceForm] = useState<any>(null);
 
   const DEFAULT_LINE_ITEM = { description: "", quantity: "1", unitPrice: "" };
   const DEFAULT_INVOICE = {
@@ -137,6 +139,85 @@ export default function Invoices() {
       toast({ title: "Failed to delete invoice", variant: "destructive" });
     }
     setDeleteInvoiceId(null);
+  };
+
+  // ── Edit Invoice ──
+  const openEditInvoice = (invoice: any) => {
+    setEditInvoiceId(invoice.id);
+    setEditInvoiceForm({
+      projectId: invoice.projectId,
+      projectName: invoice.projectName,
+      issueDate: invoice.issueDate,
+      dueDate: invoice.dueDate,
+      taxRate: String(invoice.taxRate ?? 0),
+      notes: invoice.notes || "",
+      lineItems: (invoice.lineItems || []).map((li: any) => ({
+        description: li.description || "",
+        quantity: String(li.quantity || 1),
+        unitPrice: String(li.unitPrice || 0),
+      })),
+    });
+  };
+
+  const setEditInv = (k: string, v: any) => setEditInvoiceForm((f: any) => ({ ...f, [k]: v }));
+
+  const updateEditLineItem = (idx: number, field: string, value: string) => {
+    setEditInvoiceForm((f: any) => ({
+      ...f,
+      lineItems: f.lineItems.map((item: any, i: number) => i === idx ? { ...item, [field]: value } : item),
+    }));
+  };
+
+  const addEditLineItem = () => {
+    setEditInvoiceForm((f: any) => ({ ...f, lineItems: [...f.lineItems, { ...DEFAULT_LINE_ITEM }] }));
+  };
+
+  const removeEditLineItem = (idx: number) => {
+    setEditInvoiceForm((f: any) => ({
+      ...f,
+      lineItems: f.lineItems.length > 1 ? f.lineItems.filter((_: any, i: number) => i !== idx) : f.lineItems,
+    }));
+  };
+
+  const editInvoiceTotals = useMemo(() => {
+    if (!editInvoiceForm) return { subtotal: 0, taxAmount: 0, total: 0 };
+    const subtotal = editInvoiceForm.lineItems.reduce((sum: number, item: any) => {
+      return sum + (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0);
+    }, 0);
+    const taxRate = Number(editInvoiceForm.taxRate) || 0;
+    const taxAmount = subtotal * (taxRate / 100);
+    return { subtotal, taxAmount, total: subtotal + taxAmount };
+  }, [editInvoiceForm]);
+
+  const handleSaveInvoice = () => {
+    if (!editInvoiceId || !editInvoiceForm) return;
+    updateInvoice.mutate(
+      {
+        id: editInvoiceId,
+        data: {
+          issueDate: editInvoiceForm.issueDate,
+          dueDate: editInvoiceForm.dueDate,
+          taxRate: Number(editInvoiceForm.taxRate) || 0,
+          notes: editInvoiceForm.notes || undefined,
+          lineItems: editInvoiceForm.lineItems
+            .filter((li: any) => li.description || li.unitPrice)
+            .map((li: any) => ({
+              description: li.description,
+              quantity: Number(li.quantity) || 1,
+              unitPrice: Number(li.unitPrice) || 0,
+            })),
+        } as any,
+      },
+      {
+        onSuccess: () => {
+          toast({ title: "Invoice updated" });
+          setEditInvoiceId(null);
+          setEditInvoiceForm(null);
+          queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+        },
+        onError: () => toast({ title: "Failed to update invoice", variant: "destructive" }),
+      }
+    );
   };
 
   const setP = (k: string, v: any) => setProjForm((f) => ({ ...f, [k]: v }));
@@ -318,6 +399,15 @@ export default function Invoices() {
                         >
                           <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
                           Mark Paid
+                        </Button>
+                      )}
+                      {invoice.status === "draft" && (
+                        <Button
+                          variant="ghost" size="icon"
+                          title="Edit invoice"
+                          onClick={() => openEditInvoice(invoice)}
+                        >
+                          <Pencil className="h-4 w-4" />
                         </Button>
                       )}
                       <Button
@@ -583,6 +673,135 @@ export default function Invoices() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ── Edit Invoice Dialog ── */}
+      <Dialog open={!!editInvoiceId} onOpenChange={(open) => { if (!open) { setEditInvoiceId(null); setEditInvoiceForm(null); } }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Invoice</DialogTitle>
+          </DialogHeader>
+          {editInvoiceForm && (
+            <div className="grid gap-4 py-2">
+              {/* Project (read-only) */}
+              <div className="grid gap-2">
+                <Label>Project</Label>
+                <Input value={editInvoiceForm.projectName || ""} disabled className="bg-muted/50" />
+              </div>
+
+              {/* Dates */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-2">
+                  <Label>Issue Date</Label>
+                  <Input type="date" value={editInvoiceForm.issueDate} onChange={(e) => setEditInv("issueDate", e.target.value)} />
+                </div>
+                <div className="grid gap-2">
+                  <Label>Due Date</Label>
+                  <Input type="date" value={editInvoiceForm.dueDate} onChange={(e) => setEditInv("dueDate", e.target.value)} />
+                </div>
+              </div>
+
+              {/* Line items */}
+              <div className="grid gap-2">
+                <Label>Line Items</Label>
+                <div className="border rounded-md overflow-hidden">
+                  <div className="grid grid-cols-[1fr_80px_100px_100px_40px] gap-2 px-3 py-2 bg-muted/30 text-xs font-medium text-muted-foreground uppercase">
+                    <span>Description</span>
+                    <span>Qty</span>
+                    <span>Unit Price</span>
+                    <span className="text-right">Amount</span>
+                    <span />
+                  </div>
+                  {editInvoiceForm.lineItems.map((item: any, idx: number) => (
+                    <div key={idx} className="grid grid-cols-[1fr_80px_100px_100px_40px] gap-2 px-3 py-1.5 border-t items-center">
+                      <Input
+                        placeholder="Service description"
+                        value={item.description}
+                        onChange={(e) => updateEditLineItem(idx, "description", e.target.value)}
+                        className="h-8 text-sm"
+                      />
+                      <Input
+                        type="number" min="1"
+                        value={item.quantity}
+                        onChange={(e) => updateEditLineItem(idx, "quantity", e.target.value)}
+                        className="h-8 text-sm"
+                      />
+                      <Input
+                        type="number" min="0" step="0.01"
+                        placeholder="0.00"
+                        value={item.unitPrice}
+                        onChange={(e) => updateEditLineItem(idx, "unitPrice", e.target.value)}
+                        className="h-8 text-sm"
+                      />
+                      <div className="text-right text-sm font-medium tabular-nums pr-1">
+                        ${((Number(item.quantity) || 0) * (Number(item.unitPrice) || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                      <button
+                        onClick={() => removeEditLineItem(idx)}
+                        className="text-muted-foreground hover:text-destructive transition-colors disabled:opacity-30"
+                        disabled={editInvoiceForm.lineItems.length <= 1}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <Button variant="outline" size="sm" onClick={addEditLineItem} className="w-fit mt-1">
+                  <Plus className="mr-1.5 h-3.5 w-3.5" />
+                  Add Line Item
+                </Button>
+              </div>
+
+              {/* Tax rate */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-2">
+                  <Label>Tax Rate (%)</Label>
+                  <Input
+                    type="number" min="0" max="100" step="0.01"
+                    value={editInvoiceForm.taxRate}
+                    onChange={(e) => setEditInv("taxRate", e.target.value)}
+                  />
+                </div>
+                <div />
+              </div>
+
+              {/* Notes */}
+              <div className="grid gap-2">
+                <Label>Notes</Label>
+                <Textarea
+                  placeholder="Payment terms, notes, etc."
+                  value={editInvoiceForm.notes}
+                  onChange={(e) => setEditInv("notes", e.target.value)}
+                  rows={2}
+                />
+              </div>
+
+              {/* Totals */}
+              <div className="border-t pt-3 flex flex-col items-end gap-1 text-sm">
+                <div className="flex gap-8">
+                  <span className="text-muted-foreground">Subtotal</span>
+                  <span className="font-medium tabular-nums w-24 text-right">${editInvoiceTotals.subtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+                {Number(editInvoiceForm.taxRate) > 0 && (
+                  <div className="flex gap-8">
+                    <span className="text-muted-foreground">Tax ({editInvoiceForm.taxRate}%)</span>
+                    <span className="font-medium tabular-nums w-24 text-right">${editInvoiceTotals.taxAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </div>
+                )}
+                <div className="flex gap-8 text-base font-bold border-t pt-1 mt-1">
+                  <span>Total</span>
+                  <span className="tabular-nums w-24 text-right">${editInvoiceTotals.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setEditInvoiceId(null); setEditInvoiceForm(null); }}>Cancel</Button>
+            <Button onClick={handleSaveInvoice} disabled={updateInvoice.isPending}>
+              {updateInvoice.isPending ? "Saving…" : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
