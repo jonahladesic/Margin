@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   RefreshCw, Link2, Unlink, CheckCircle2, XCircle, AlertCircle,
   ArrowDownToLine, ArrowUpFromLine, Clock, Loader2,
+  Users, UserPlus, Trash2, Pencil,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,6 +12,14 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Alert, AlertDescription,
 } from "@/components/ui/alert";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { useCurrentUser } from "@/contexts/auth-context";
 
 const API_BASE = "/api";
 
@@ -44,12 +53,87 @@ function useSyncStatus() {
   });
 }
 
+const ROLE_OPTIONS = [
+  { value: "designer", label: "Designer" },
+  { value: "pm", label: "Project Manager" },
+  { value: "admin", label: "Admin" },
+];
+
+const ROLE_COLORS: Record<string, string> = {
+  admin: "bg-primary/20 text-primary border-primary/30",
+  pm: "bg-blue-500/20 text-blue-400 border-blue-500/30",
+  designer: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
+};
+
+function getInitials(firstName: string | null, lastName: string | null): string {
+  const f = firstName?.[0] ?? "";
+  const l = lastName?.[0] ?? "";
+  return (f + l).toUpperCase() || "?";
+}
+
 export default function Settings() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { user: currentUser, isPM, isAdmin } = useCurrentUser();
   const { data: bqeStatus, isLoading: statusLoading } = useBqeStatus();
   const { data: syncStatus } = useSyncStatus();
   const [syncing, setSyncing] = useState(false);
+
+  // Team management state
+  const [addMemberOpen, setAddMemberOpen] = useState(false);
+  const [editMemberId, setEditMemberId] = useState<string | null>(null);
+  const [memberForm, setMemberForm] = useState({ email: "", firstName: "", lastName: "", role: "designer" });
+
+  const { data: teamMembers = [], isLoading: teamLoading } = useQuery({
+    queryKey: ["/api/users"],
+    queryFn: () => api("/users"),
+  });
+
+  const createMember = useMutation({
+    mutationFn: (data: any) => api("/users", { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      toast({ title: "Team member added" });
+      setAddMemberOpen(false);
+      setMemberForm({ email: "", firstName: "", lastName: "", role: "designer" });
+    },
+    onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
+  });
+
+  const updateMember = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) =>
+      api(`/users/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      toast({ title: "Team member updated" });
+      setEditMemberId(null);
+    },
+    onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
+  });
+
+  const deleteMember = useMutation({
+    mutationFn: (id: string) => api(`/users/${id}`, { method: "DELETE" }).catch(() => null),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      toast({ title: "Team member removed" });
+    },
+    onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
+  });
+
+  function openAddMember() {
+    setMemberForm({ email: "", firstName: "", lastName: "", role: "designer" });
+    setAddMemberOpen(true);
+  }
+
+  function openEditMember(member: any) {
+    setMemberForm({
+      email: member.email || "",
+      firstName: member.firstName || "",
+      lastName: member.lastName || "",
+      role: member.role || "designer",
+    });
+    setEditMemberId(member.id);
+  }
 
   const connected = bqeStatus?.connected === true;
 
@@ -141,6 +225,175 @@ export default function Settings() {
         <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
         <p className="text-muted-foreground mt-1">Manage integrations and app configuration</p>
       </div>
+
+      {/* Team Members Card */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5" />
+                Team Members
+              </CardTitle>
+              <CardDescription className="mt-1">
+                People who can sign in with Google. Add their email before they can log in.
+              </CardDescription>
+            </div>
+            {(isPM || isAdmin) && (
+              <Button size="sm" onClick={openAddMember}>
+                <UserPlus className="h-4 w-4 mr-2" />
+                Add Member
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          {teamLoading ? (
+            <div className="flex justify-center py-6">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <div className="divide-y">
+              {(teamMembers as any[]).map((member: any) => (
+                <div key={member.id} className="flex items-center gap-4 py-3">
+                  <Avatar className="h-9 w-9 border border-border">
+                    {member.profileImage ? (
+                      <AvatarImage src={member.profileImage} />
+                    ) : null}
+                    <AvatarFallback className="text-xs font-semibold">
+                      {getInitials(member.firstName, member.lastName)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-sm">
+                      {[member.firstName, member.lastName].filter(Boolean).join(" ") || member.username}
+                    </div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      {member.email || "No email set"}
+                    </div>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className={`text-[10px] px-1.5 py-0 border ${ROLE_COLORS[member.role] || ROLE_COLORS.designer}`}
+                  >
+                    {ROLE_OPTIONS.find((r) => r.value === member.role)?.label || member.role}
+                  </Badge>
+                  {(isPM || isAdmin) && member.id !== currentUser?.id && (
+                    <div className="flex gap-1">
+                      <Button
+                        variant="ghost" size="icon" className="h-7 w-7"
+                        onClick={() => openEditMember(member)}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      {isAdmin && (
+                        <Button
+                          variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive"
+                          onClick={() => {
+                            if (confirm(`Remove ${member.firstName || member.email}?`)) {
+                              deleteMember.mutate(member.id);
+                            }
+                          }}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                  {member.id === currentUser?.id && (
+                    <span className="text-[10px] text-muted-foreground">You</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Add / Edit Member Dialog */}
+      <Dialog
+        open={addMemberOpen || !!editMemberId}
+        onOpenChange={(open) => { if (!open) { setAddMemberOpen(false); setEditMemberId(null); } }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editMemberId ? "Edit Team Member" : "Add Team Member"}</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="grid gap-2">
+              <Label>Email *</Label>
+              <Input
+                type="email"
+                placeholder="name@company.com"
+                value={memberForm.email}
+                onChange={(e) => setMemberForm((f) => ({ ...f, email: e.target.value }))}
+                disabled={!!editMemberId}
+                className={editMemberId ? "bg-muted/50" : ""}
+              />
+              {!editMemberId && (
+                <p className="text-xs text-muted-foreground">
+                  Must match their Google account email — they'll use this to sign in.
+                </p>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-2">
+                <Label>First Name</Label>
+                <Input
+                  placeholder="First"
+                  value={memberForm.firstName}
+                  onChange={(e) => setMemberForm((f) => ({ ...f, firstName: e.target.value }))}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label>Last Name</Label>
+                <Input
+                  placeholder="Last"
+                  value={memberForm.lastName}
+                  onChange={(e) => setMemberForm((f) => ({ ...f, lastName: e.target.value }))}
+                />
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label>Role</Label>
+              <Select
+                value={memberForm.role}
+                onValueChange={(v) => setMemberForm((f) => ({ ...f, role: v }))}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {ROLE_OPTIONS.map((r) => (
+                    <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => { setAddMemberOpen(false); setEditMemberId(null); }}
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={!memberForm.email || createMember.isPending || updateMember.isPending}
+              onClick={() => {
+                if (editMemberId) {
+                  updateMember.mutate({
+                    id: editMemberId,
+                    data: { firstName: memberForm.firstName, lastName: memberForm.lastName, role: memberForm.role },
+                  });
+                } else {
+                  createMember.mutate(memberForm);
+                }
+              }}
+            >
+              {(createMember.isPending || updateMember.isPending) ? "Saving..." : editMemberId ? "Save Changes" : "Add Member"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* BQE Core Connection Card */}
       <Card>

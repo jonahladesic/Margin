@@ -3,7 +3,7 @@
   "name": "Time Palette",
   "version": "1.0.0",
   "description": "Color-code events in Google Calendar by project and see hours-per-project totals in the sidebar.",
-  "permissions": ["storage", "activeTab"],
+  "permissions": ["storage", "activeTab", "cookies"],
   "host_permissions": [
     "https://calendar.google.com/*",
     "https://margin.rsmdesign.com/*",

@@ -51,34 +51,72 @@ async function handleSignIn() {
   const base = (apiBaseInput.value || DEFAULT_API_BASE).replace(/\/+$/, '');
   await storageSet({ [STORAGE_KEYS.API_BASE]: base });
 
-  // Try to grab extension token (user might already be logged in via the web)
   signInBtn.textContent = 'Checking...';
   signInBtn.disabled = true;
 
-  try {
-    const res = await fetch(base + '/api/auth/extension-token', {
-      credentials: 'include',
-    });
-
-    if (res.ok) {
-      const data = await res.json();
-      if (data.sid && data.user) {
-        await storageSet({ [STORAGE_KEYS.SESSION]: { sid: data.sid, user: data.user } });
-        showMainSection({ sid: data.sid, user: data.user });
-        await loadProjects(base, data.sid);
-        return;
-      }
-    }
-  } catch (err) {
-    console.log('[TimePalette] No existing session, opening login page');
+  // Try to grab the session cookie from the Margin domain using chrome.cookies API
+  const grabbed = await tryGrabSession(base);
+  if (grabbed) {
+    signInBtn.textContent = 'Sign in with Google';
+    signInBtn.disabled = false;
+    return;
   }
 
   // No existing session — open the login page
   chrome.tabs.create({ url: base + '/login' });
 
-  // Show a message and a retry button
-  signInBtn.textContent = 'Retry Connection';
+  // Show a retry button — user will click after completing SSO
+  signInBtn.textContent = 'I\'ve signed in — Connect';
   signInBtn.disabled = false;
+}
+
+// Use chrome.cookies to read the "sid" cookie from the Margin domain,
+// then validate it against the API and store it for the extension to use.
+async function tryGrabSession(base) {
+  try {
+    // Extract the domain URL for chrome.cookies
+    const url = base.startsWith('http') ? base : 'https://' + base;
+
+    const cookie = await new Promise((resolve) => {
+      chrome.cookies.get({ url, name: 'sid' }, (c) => resolve(c));
+    });
+
+    if (!cookie || !cookie.value) {
+      console.log('[TimePalette] No sid cookie found on', url);
+      return false;
+    }
+
+    const sid = cookie.value;
+
+    // Validate the session by calling /api/auth/user with the token
+    const res = await fetch(base + '/api/auth/user', {
+      headers: { 'Authorization': 'Bearer ' + sid },
+    });
+
+    if (!res.ok) {
+      console.log('[TimePalette] Session cookie invalid (API returned', res.status + ')');
+      return false;
+    }
+
+    const data = await res.json();
+    if (!data.authenticated || !data.user) {
+      console.log('[TimePalette] Session not authenticated');
+      return false;
+    }
+
+    // Store the session for the extension
+    await storageSet({
+      [STORAGE_KEYS.SESSION]: { sid, user: data.user },
+    });
+
+    showMainSection({ sid, user: data.user });
+    await loadProjects(base, sid);
+    showToast('Connected!');
+    return true;
+  } catch (err) {
+    console.error('[TimePalette] tryGrabSession error:', err);
+    return false;
+  }
 }
 
 async function handleSignOut() {
