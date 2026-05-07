@@ -1,0 +1,453 @@
+/* ==== Time Palette — Injected Styles ==== */
+
+.tp-context-menu,
+.tp-sidebar-widget {
+  --tp-bg: #ffffff;
+  --tp-bg-hover: #f3f4f6;
+  --tp-bg-active: #eef2ff;
+  --tp-border: #e5e7eb;
+  --tp-text: #111827;
+  --tp-text-muted: #6b7280;
+  --tp-text-subtle: #9ca3af;
+  --tp-accent: #4f46e5;
+  --tp-danger: #dc2626;
+  --tp-radius: 12px;
+  --tp-radius-sm: 8px;
+  --tp-shadow: 0 10px 32px rgba(17, 24, 39, 0.14),
+                   0 2px 6px rgba(17, 24, 39, 0.08),
+                   0 0 0 1px rgba(17, 24, 39, 0.06);
+}
+
+/* ---- Context Menu ---- */
+.tp-context-menu {
+  position: fixed;
+  z-index: 99999;
+  background: var(--tp-bg);
+  border-radius: var(--tp-radius);
+  box-shadow: var(--tp-shadow);
+  min-width: 240px;
+  max-width: 300px;
+  padding: 6px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
+  font-size: 13px;
+  color: var(--tp-text);
+  animation: tp-pop-in 0.14s cubic-bezier(0.2, 0, 0, 1.2);
+  -webkit-font-smoothing: antialiased;
+}
+
+@keyframes tp-pop-in {
+  from { opacity: 0; transform: scale(0.96) translateY(-2px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.tp-menu-header {
+  padding: 8px 12px 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--tp-text-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.tp-menu-event {
+  padding: 2px 12px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tp-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: -0.01em;
+}
+
+.tp-menu-divider {
+  height: 1px;
+  background: var(--tp-border);
+  margin: 4px 6px;
+}
+
+.tp-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  margin: 1px 0;
+  border-radius: var(--tp-radius-sm);
+  cursor: pointer;
+  transition: background 0.12s cubic-bezier(0.2, 0, 0, 1);
+  user-select: none;
+}
+
+.tp-menu-item:hover {
+  background: var(--tp-bg-hover);
+}
+
+.tp-menu-item-active {
+  background: var(--tp-bg-active);
+  color: var(--tp-accent);
+  font-weight: 500;
+}
+
+.tp-menu-item-active:hover {
+  background: #dfe6ff;
+}
+
+.tp-menu-item-unassign {
+  color: var(--tp-danger);
+  font-size: 12.5px;
+}
+
+.tp-menu-item-unassign:hover {
+  background: #fef2f2;
+}
+
+.tp-menu-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 1px rgba(17, 24, 39, 0.08);
+}
+
+.tp-menu-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tp-menu-check {
+  font-size: 13px;
+  color: var(--tp-accent);
+  font-weight: 700;
+}
+
+.tp-menu-arrow {
+  font-size: 14px;
+  color: var(--tp-text-subtle);
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+/* Phase submenu — appears to the right of a project row */
+.tp-phase-submenu {
+  position: absolute;
+  left: 100%;
+  top: 0;
+  z-index: 100000;
+  background: var(--tp-bg);
+  border-radius: var(--tp-radius);
+  box-shadow: var(--tp-shadow);
+  min-width: 180px;
+  max-width: 260px;
+  padding: 6px;
+  font-size: 13px;
+  animation: tp-pop-in 0.12s cubic-bezier(0.2, 0, 0, 1.2);
+}
+
+.tp-menu-item-project {
+  position: relative;
+}
+
+.tp-menu-item-phase {
+  font-size: 12.5px;
+  padding: 7px 10px;
+}
+
+.tp-menu-empty {
+  padding: 14px 14px 16px;
+  color: var(--tp-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+/* ---- Sidebar Widget ----
+ * Horizontal margins are applied INLINE by content/sidebar-widget.js
+ * (applyNativeMargins) — they're measured at runtime from a native
+ * sibling section so the widget's left/right edges match GCal's native
+ * inset exactly. We use margin rather than padding because GCal's sidebar
+ * stretches direct children to full width; only moving the widget's outer
+ * box (margin) actually insets the content visually.
+ */
+.tp-sidebar-widget {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-sizing: border-box !important;
+  font-family: 'Google Sans', 'Google Sans Display', 'Roboto', Arial, sans-serif;
+  color: #1f1f1f;
+  -webkit-font-smoothing: antialiased;
+}
+
+.tp-widget-empty {
+  padding: 2px 0;
+  font-size: 13px;
+  line-height: 18px;
+  color: #5f6368;
+}
+
+/* Project rows */
+.tp-project-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tp-project-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tp-project-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 400;
+}
+
+.tp-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+
+.tp-project-label {
+  flex: 1;
+  color: #1f1f1f;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tp-project-hours {
+  color: #1f1f1f;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Bar — full-width colored line under each project, no track */
+.tp-bar-fill {
+  height: 5px;
+  border-radius: 3px;
+  transition: width 0.3s cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Phase rows — indented under project */
+.tp-phase-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 18px;
+  font-size: 11.5px;
+  line-height: 16px;
+  color: #5f6368;
+  margin-top: -4px;
+}
+
+.tp-phase-border {
+  width: 2px;
+  height: 12px;
+  border-left: 2px solid;
+  flex-shrink: 0;
+}
+
+.tp-phase-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tp-phase-hours {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Total row */
+.tp-total-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 14px;
+  font-size: 13px;
+  line-height: 18px;
+  color: #1f1f1f;
+  font-variant-numeric: tabular-nums;
+}
+
+.tp-total-label {
+  font-weight: 400;
+}
+
+.tp-total-hours {
+  font-weight: 400;
+}
+
+/* ---- Team toggle + section ---- */
+.tp-team-toggle {
+  margin-top: 12px;
+  padding: 6px 0;
+  text-align: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.tp-team-toggle-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: #5f6368;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 3px 10px;
+  border-radius: 10px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.tp-team-toggle:hover .tp-team-toggle-label {
+  background: rgba(0, 0, 0, 0.04);
+  color: #1f1f1f;
+}
+
+.tp-team-section {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tp-team-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.tp-team-name {
+  width: 60px;
+  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #1f1f1f;
+}
+
+.tp-team-bar-wrap {
+  flex: 1;
+  height: 6px;
+  background: #f3f4f6;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.tp-team-bar {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.tp-team-hours {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: #5f6368;
+  min-width: 48px;
+  text-align: right;
+}
+
+/* ---- Event coloring overrides ----
+ *
+ * Two-tier painting:
+ *   (a) The chip root + descendants that JS has tagged [data-tp-paint]
+ *       get the project background color. JS tags ONLY descendants whose
+ *       native background was non-transparent — i.e. the real color layers
+ *       (invited/Zoom events put color on a nested child). This leaves
+ *       overlay layers (absolutely-positioned children that sit above the
+ *       text) with their natural transparent background, so text stays
+ *       visible.
+ *   (b) ALL descendants still inherit the contrast-matched text color,
+ *       so whatever wrapper holds the title reads correctly against the
+ *       painted background.
+ */
+[data-tp-project],
+[data-tp-paint] {
+  background-color: var(--tp-color) !important;
+  background-image: none !important;
+  border-color: var(--tp-color) !important;
+}
+
+[data-tp-project],
+[data-tp-project] * {
+  color: var(--tp-text) !important;
+}
+
+/* Keep the chip's rounded corners. JS reads the chip's effective radius at
+ * apply-time and sets --tp-radius on the root. */
+[data-tp-project],
+[data-tp-paint] {
+  border-radius: var(--tp-radius, 4px) !important;
+}
+
+/* ---- Dark mode ---- */
+@media (prefers-color-scheme: dark) {
+  .tp-context-menu,
+  .tp-sidebar-widget {
+    --tp-bg: #2a2b2e;
+    --tp-bg-hover: #34363a;
+    --tp-bg-active: #353867;
+    --tp-border: #3e4044;
+    --tp-text: #f3f4f6;
+    --tp-text-muted: #a1a5ab;
+    --tp-text-subtle: #6b7280;
+    --tp-accent: #a5b4fc;
+    --tp-danger: #f87171;
+    --tp-shadow: 0 10px 32px rgba(0, 0, 0, 0.5),
+                     0 2px 6px rgba(0, 0, 0, 0.3),
+                     0 0 0 1px rgba(255, 255, 255, 0.06);
+  }
+
+  .tp-sidebar-widget {
+    color: #e3e3e3;
+  }
+
+  .tp-sidebar-widget .tp-project-label,
+  .tp-sidebar-widget .tp-project-hours,
+  .tp-sidebar-widget .tp-total-row,
+  .tp-sidebar-widget .tp-widget-empty {
+    color: #e3e3e3;
+  }
+
+  .tp-sidebar-widget .tp-dot {
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12);
+  }
+
+  .tp-sidebar-widget .tp-phase-row {
+    color: #a1a5ab;
+  }
+
+  .tp-sidebar-widget .tp-team-name {
+    color: #e3e3e3;
+  }
+
+  .tp-sidebar-widget .tp-team-hours {
+    color: #a1a5ab;
+  }
+
+  .tp-sidebar-widget .tp-team-bar-wrap {
+    background: #3e4044;
+  }
+
+  .tp-team-toggle:hover .tp-team-toggle-label {
+    background: rgba(255, 255, 255, 0.06);
+    color: #e3e3e3;
+  }
+
+  .tp-menu-item-active:hover { background: #3e427a; }
+  .tp-menu-item-unassign:hover { background: #3a2020; }
+}

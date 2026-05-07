@@ -12,6 +12,7 @@ import expensesRouter from "./expenses";
 import breakBlocksRouter from "./break-blocks";
 import meetingsRouter from "./meetings";
 import bqeCoreRouter from "./bqe-core";
+import gcalRouter from "./gcal";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use(expensesRouter);
 router.use(breakBlocksRouter);
 router.use(meetingsRouter);
 router.use(bqeCoreRouter);
+router.use(gcalRouter);
 
 export default router;

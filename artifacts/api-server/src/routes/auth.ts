@@ -236,6 +236,41 @@ router.post("/auth/login", async (req: Request, res: Response) => {
   });
 });
 
+// Extension token — returns the session ID for the Chrome extension to use as Bearer token
+router.get("/auth/extension-token", async (req: Request, res: Response) => {
+  if (!req.isAuthenticated()) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+
+  const sid = getSessionId(req);
+  if (!sid) {
+    res.status(401).json({ error: "No session" });
+    return;
+  }
+
+  // Return the session ID and user info for the extension to store
+  const [dbUser] = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.id, req.user.id))
+    .limit(1);
+
+  res.json({
+    sid,
+    user: dbUser
+      ? {
+          id: dbUser.id,
+          firstName: dbUser.firstName,
+          lastName: dbUser.lastName,
+          email: dbUser.email,
+          profileImage: dbUser.profileImage,
+          role: dbUser.role,
+        }
+      : req.user,
+  });
+});
+
 // Logout
 router.post("/auth/logout", async (req: Request, res: Response) => {
   const sid = getSessionId(req);

@@ -1,0 +1,47 @@
+{
+  "manifest_version": 3,
+  "name": "Time Palette",
+  "version": "1.0.0",
+  "description": "Color-code events in Google Calendar by project and see hours-per-project totals in the sidebar.",
+  "permissions": ["storage", "activeTab"],
+  "host_permissions": [
+    "https://calendar.google.com/*",
+    "https://margin.rsmdesign.com/*",
+    "http://localhost:3000/*"
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://calendar.google.com/*"],
+      "js": [
+        "lib/utils.js",
+        "lib/api-client.js",
+        "lib/auth.js",
+        "lib/storage.js",
+        "content/view-detector.js",
+        "content/dom-observer.js",
+        "content/event-coloring.js",
+        "content/context-menu.js",
+        "content/sidebar-widget.js",
+        "content/content.js"
+      ],
+      "css": ["styles/content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
