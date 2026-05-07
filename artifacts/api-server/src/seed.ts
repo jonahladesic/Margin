@@ -17,10 +17,10 @@ const TEST_USERS = [
   {
     id: "user-admin-001",
     replitId: "admin-001",
-    username: "admin",
-    firstName: "Alex",
-    lastName: "Morgan",
-    email: "alex@rsmdesign.com",
+    username: "jonahlad",
+    firstName: "Jonah",
+    lastName: "Ladesic",
+    email: "jonahlad@gmail.com",
     role: "admin" as const,
   },
   {
