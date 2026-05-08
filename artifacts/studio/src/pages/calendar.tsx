@@ -206,7 +206,7 @@ export default function Calendar() {
     onError: () => toast({ title: "Failed to add allocation", variant: "destructive" }),
   });
 
-  const rsmInternal = (projects as any[]).find((p: any) => p.isInternal === true);
+  const internalProject = (projects as any[]).find((p: any) => p.isInternal === true);
   const activeProjects = (projects as any[]).filter(
     (p: any) => !p.isInternal && (p.status === "active" || !p.status)
   );
@@ -651,8 +651,8 @@ export default function Calendar() {
         toast({ title: "Please enter a meeting title", variant: "destructive" });
         return;
       }
-      // Find RSM Internal project for meeting context
-      const internalProject = rsmInternal;
+      // Find internal project for meeting context
+      const internalProject = internalProject;
       createMeeting.mutate({
         title: meetingForm.title,
         organizerId: effectiveUserId || currentUser?.id || "",
@@ -1137,16 +1137,16 @@ export default function Calendar() {
                   <span className="text-xs font-medium text-gray-400">Break</span>
                 </div>
 
-                {/* RSM Internal pinned */}
-                {rsmInternal && (
+                {/* Internal project pinned */}
+                {internalProject && (
                   <div
                     draggable
-                    onDragStart={(e) => handleProjectDragStart(e, rsmInternal)}
+                    onDragStart={(e) => handleProjectDragStart(e, internalProject)}
                     className="flex items-center gap-2 px-2 py-1.5 rounded-md cursor-grab active:cursor-grabbing hover:bg-muted/60 transition-colors select-none border border-primary/40 bg-primary/10"
                     title="Drag to log overhead time (PTO, WOW, etc.)"
                   >
                     <Building2 className="h-3 w-3 text-primary shrink-0" />
-                    <span className="text-xs font-medium text-primary truncate">RSM Internal</span>
+                    <span className="text-xs font-medium text-primary truncate">Internal</span>
                   </div>
                 )}
 
@@ -1317,7 +1317,7 @@ export default function Calendar() {
 
                       {dayBlocks.map((tb: any, idx: number) => {
                         const isMeeting = tb.type === "meeting";
-                        const isInternal = !isMeeting && rsmInternal && tb.projectId === rsmInternal.id;
+                        const isInternal = !isMeeting && internalProject && tb.projectId === internalProject.id;
                         const meetingColor = "#a855f7"; // purple
                         const color = isMeeting ? meetingColor : isInternal ? "#E8772E" : getProjectColor(tb.projectId);
                         const blockHours = tb.hours || 1;

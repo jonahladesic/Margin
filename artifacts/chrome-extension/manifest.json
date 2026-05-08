@@ -6,8 +6,8 @@
   "permissions": ["storage", "activeTab", "cookies"],
   "host_permissions": [
     "https://calendar.google.com/*",
-    "https://margin.rsmdesign.com/*",
-    "http://localhost:3000/*"
+    "http://localhost:3000/*",
+    "http://localhost:4001/*"
   ],
   "action": {
     "default_popup": "popup/popup.html",

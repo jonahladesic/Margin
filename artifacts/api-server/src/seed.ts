@@ -3,8 +3,8 @@ import { projectsTable, phasesTable, usersTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
-const RSM_INTERNAL_COLOR = "#E8772E";
-const RSM_INTERNAL_PHASES = [
+const INTERNAL_COLOR = "#E8772E";
+const INTERNAL_PHASES = [
   "PTO",
   "Weekly WOW",
   "Admin",
@@ -29,7 +29,7 @@ const TEST_USERS = [
     username: "sarah.pm",
     firstName: "Sarah",
     lastName: "Chen",
-    email: "sarah@rsmdesign.com",
+    email: "sarah.chen@example.com",
     role: "pm" as const,
   },
   {
@@ -38,7 +38,7 @@ const TEST_USERS = [
     username: "james.designer",
     firstName: "James",
     lastName: "Rivera",
-    email: "james@rsmdesign.com",
+    email: "james.rivera@example.com",
     role: "designer" as const,
   },
   {
@@ -47,7 +47,7 @@ const TEST_USERS = [
     username: "maya.designer",
     firstName: "Maya",
     lastName: "Patel",
-    email: "maya@rsmdesign.com",
+    email: "maya.patel@example.com",
     role: "designer" as const,
   },
 ];
@@ -66,7 +66,7 @@ export async function seedTestUsers() {
   }
 }
 
-export async function seedRSMInternal() {
+export async function seedInternalProject() {
   let existing = await db
     .select()
     .from(projectsTable)
@@ -79,18 +79,18 @@ export async function seedRSMInternal() {
     projectId = randomUUID();
     await db.insert(projectsTable).values({
       id: projectId,
-      name: "RSM Internal",
+      name: "Internal",
       clientId: null,
       status: "active",
       type: "other",
       workStatus: "working_internally",
       isInternal: true,
       budgetedHours: "0",
-      color: RSM_INTERNAL_COLOR,
+      color: INTERNAL_COLOR,
       ntpReceived: false,
       paymentStatus: "unpaid",
     });
-    console.log("Created RSM Internal project");
+    console.log("Created Internal project");
   } else {
     projectId = existing[0].id;
   }
@@ -101,7 +101,7 @@ export async function seedRSMInternal() {
     .where(eq(phasesTable.projectId, projectId));
 
   const existingNames = new Set(existingPhases.map((p) => p.name));
-  const missingPhases = RSM_INTERNAL_PHASES.filter((name) => !existingNames.has(name));
+  const missingPhases = INTERNAL_PHASES.filter((name) => !existingNames.has(name));
 
   if (missingPhases.length > 0) {
     await db.insert(phasesTable).values(
@@ -115,6 +115,6 @@ export async function seedRSMInternal() {
         sortOrder: String(existingPhases.length + idx),
       }))
     );
-    console.log(`Seeded RSM Internal phases: ${missingPhases.join(", ")}`);
+    console.log(`Seeded Internal phases: ${missingPhases.join(", ")}`);
   }
 }

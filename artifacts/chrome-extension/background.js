@@ -5,7 +5,7 @@ chrome.runtime.onInstalled.addListener((details) => {
     // Initialize default storage — no longer need tp_projects/tp_assignments
     // since those come from the backend. Just set defaults for the API config.
     chrome.storage.local.set({
-      tp_api_base: 'https://margin.rsmdesign.com',
+      tp_api_base: 'http://localhost:4001',
     });
   }
 });

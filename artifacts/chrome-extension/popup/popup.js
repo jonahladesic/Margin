@@ -4,7 +4,7 @@ const STORAGE_KEYS = {
   SESSION: 'tp_session',
   API_BASE: 'tp_api_base',
 };
-const DEFAULT_API_BASE = 'https://margin.rsmdesign.com';
+const DEFAULT_API_BASE = 'http://localhost:4001';
 
 // ---- DOM refs ----
 const authSection = document.getElementById('auth-section');

@@ -3,10 +3,10 @@
 (function (ns) {
   const STORAGE_KEYS = {
     SESSION: 'tp_session',      // { sid, user }
-    API_BASE: 'tp_api_base',    // e.g. "https://margin.rsmdesign.com"
+    API_BASE: 'tp_api_base',    // e.g. "http://localhost:4001"
   };
 
-  const DEFAULT_API_BASE = 'https://margin.rsmdesign.com';
+  const DEFAULT_API_BASE = 'http://localhost:4001';
 
   // Read a value from chrome.storage.local (returns a promise)
   function storageGet(key) {
