@@ -38,7 +38,6 @@ const allowlist = [
   "zod-validation-error",
   "crypto",
   "jspdf",
-  "google-auth-library",
 ];
 
 async function buildAll() {

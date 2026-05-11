@@ -58,7 +58,7 @@
     openLoginPage: async function () {
       const result = await storageGet(STORAGE_KEYS.API_BASE);
       const base = result[STORAGE_KEYS.API_BASE] || 'http://localhost:4001';
-      // Open the login page — after SSO completes, user returns to the app
+      // Open the login page — after sign-in completes, user returns to the app
       // Then they click "Connect Extension" which calls /auth/extension-token
       chrome.tabs.create({ url: base + '/login' });
     },

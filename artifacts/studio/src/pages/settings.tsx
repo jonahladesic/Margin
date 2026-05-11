@@ -236,7 +236,7 @@ export default function Settings() {
                 Team Members
               </CardTitle>
               <CardDescription className="mt-1">
-                People who can sign in with Google. Add their email before they can log in.
+                Manage your team. Add members so they can sign in and track time.
               </CardDescription>
             </div>
             {(isPM || isAdmin) && (
@@ -332,7 +332,7 @@ export default function Settings() {
               />
               {!editMemberId && (
                 <p className="text-xs text-muted-foreground">
-                  Must match their Google account email — they'll use this to sign in.
+                  This email will identify them in the system.
                 </p>
               )}
             </div>

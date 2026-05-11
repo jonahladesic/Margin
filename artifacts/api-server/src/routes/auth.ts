@@ -1,8 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import crypto from "crypto";
-import { OAuth2Client } from "google-auth-library";
 import {
   clearSession,
   getSessionId,
@@ -14,10 +12,6 @@ import {
 
 const router: IRouter = Router();
 
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
-const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI;
-
 function setSessionCookie(res: Response, sid: string) {
   res.cookie(SESSION_COOKIE, sid, {
     httpOnly: true,
@@ -27,110 +21,6 @@ function setSessionCookie(res: Response, sid: string) {
     maxAge: SESSION_TTL,
   });
 }
-
-// ── Google OAuth ──
-router.get("/auth/google", (req: Request, res: Response) => {
-  if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !GOOGLE_REDIRECT_URI) {
-    res.status(500).json({ error: "Google OAuth is not configured" });
-    return;
-  }
-
-  const oauth2Client = new OAuth2Client(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI);
-
-  // Generate CSRF state token
-  const state = crypto.randomBytes(16).toString("hex");
-  res.cookie("oauth_state", state, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: 5 * 60 * 1000, // 5 minutes
-  });
-
-  const authUrl = oauth2Client.generateAuthUrl({
-    access_type: "offline",
-    scope: ["openid", "email", "profile"],
-    state,
-    prompt: "select_account",
-  });
-
-  res.redirect(authUrl);
-});
-
-router.get("/auth/google/callback", async (req: Request, res: Response) => {
-  if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !GOOGLE_REDIRECT_URI) {
-    res.redirect("/login?error=not_configured");
-    return;
-  }
-
-  const { code, state } = req.query as Record<string, string>;
-  const storedState = req.cookies?.oauth_state;
-
-  // Clear the state cookie
-  res.clearCookie("oauth_state", { path: "/" });
-
-  // CSRF check
-  if (!state || !storedState || state !== storedState) {
-    res.redirect("/login?error=invalid_state");
-    return;
-  }
-
-  try {
-    const oauth2Client = new OAuth2Client(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI);
-    const { tokens } = await oauth2Client.getToken(code);
-    oauth2Client.setCredentials(tokens);
-
-    // Verify ID token
-    const ticket = await oauth2Client.verifyIdToken({
-      idToken: tokens.id_token!,
-      audience: GOOGLE_CLIENT_ID,
-    });
-    const payload = ticket.getPayload();
-
-    if (!payload?.email) {
-      res.redirect("/login?error=no_email");
-      return;
-    }
-
-    // Look up user by email
-    const [user] = await db
-      .select()
-      .from(usersTable)
-      .where(eq(usersTable.email, payload.email))
-      .limit(1);
-
-    if (!user) {
-      // User not registered in the system
-      res.redirect("/login?error=not_authorized");
-      return;
-    }
-
-    // Update profile image from Google if not set
-    if (!user.profileImage && payload.picture) {
-      await db.update(usersTable)
-        .set({ profileImage: payload.picture })
-        .where(eq(usersTable.id, user.id));
-    }
-
-    // Create session
-    const sessionData: SessionData = {
-      user: {
-        id: user.id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        profileImageUrl: user.profileImage || payload.picture || null,
-      },
-    };
-
-    const sid = await createSession(sessionData);
-    setSessionCookie(res, sid);
-
-    res.redirect("/");
-  } catch (err: any) {
-    console.error("Google OAuth error:", err.message);
-    res.redirect("/login?error=auth_failed");
-  }
-});
 
 // Get current authenticated user
 router.get("/auth/user", async (req: Request, res: Response) => {
@@ -182,13 +72,8 @@ router.get("/auth/users", async (_req: Request, res: Response) => {
   );
 });
 
-// Login as a specific user (dev mode only in production)
+// Login as a specific user
 router.post("/auth/login", async (req: Request, res: Response) => {
-  if (process.env.NODE_ENV === "production") {
-    res.status(403).json({ error: "Dev login is disabled in production. Use Google SSO." });
-    return;
-  }
-
   const { userId } = req.body;
   if (!userId) {
     res.status(400).json({ error: "userId is required" });
@@ -236,7 +121,7 @@ router.post("/auth/login", async (req: Request, res: Response) => {
   });
 });
 
-// Extension token — returns the session ID for the Chrome extension to use as Bearer token
+// Extension token — returns the session ID for the Chrome extension
 router.get("/auth/extension-token", async (req: Request, res: Response) => {
   if (!req.isAuthenticated()) {
     res.status(401).json({ error: "Not authenticated" });
@@ -249,7 +134,6 @@ router.get("/auth/extension-token", async (req: Request, res: Response) => {
     return;
   }
 
-  // Return the session ID and user info for the extension to store
   const [dbUser] = await db
     .select()
     .from(usersTable)

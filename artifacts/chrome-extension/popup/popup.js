@@ -57,7 +57,7 @@ async function handleSignIn() {
   // Try to grab the session cookie from the Margin domain using chrome.cookies API
   const grabbed = await tryGrabSession(base);
   if (grabbed) {
-    signInBtn.textContent = 'Sign in with Google';
+    signInBtn.textContent = 'Sign in';
     signInBtn.disabled = false;
     return;
   }
@@ -65,7 +65,7 @@ async function handleSignIn() {
   // No existing session — open the login page
   chrome.tabs.create({ url: base + '/login' });
 
-  // Show a retry button — user will click after completing SSO
+  // Show a retry button — user will click after signing in
   signInBtn.textContent = 'I\'ve signed in — Connect';
   signInBtn.disabled = false;
 }
