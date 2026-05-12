@@ -1,6 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import bcrypt from "bcryptjs";
 import {
   clearSession,
   getSessionId,
@@ -22,72 +23,44 @@ function setSessionCookie(res: Response, sid: string) {
   });
 }
 
-// Get current authenticated user
-router.get("/auth/user", async (req: Request, res: Response) => {
-  if (!req.isAuthenticated()) {
-    res.json({ authenticated: false, user: null });
-    return;
-  }
-  const dbUsers = await db
-    .select()
-    .from(usersTable)
-    .where(eq(usersTable.id, req.user.id))
-    .limit(1);
-  const dbUser = dbUsers[0];
-  res.json({
-    authenticated: true,
-    user: dbUser
-      ? {
-          id: dbUser.id,
-          replitId: dbUser.replitId,
-          username: dbUser.username,
-          firstName: dbUser.firstName,
-          lastName: dbUser.lastName,
-          email: dbUser.email,
-          profileImage: dbUser.profileImage,
-          role: dbUser.role,
-          hourlyRate: dbUser.hourlyRate ? parseFloat(dbUser.hourlyRate) : null,
-          createdAt: dbUser.createdAt.toISOString(),
-        }
-      : req.user,
-  });
-});
+function formatUserResponse(user: typeof usersTable.$inferSelect) {
+  return {
+    id: user.id,
+    replitId: user.replitId,
+    username: user.username,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    email: user.email,
+    profileImage: user.profileImage,
+    role: user.role,
+    hourlyRate: user.hourlyRate ? parseFloat(user.hourlyRate) : null,
+    createdAt: user.createdAt.toISOString(),
+  };
+}
 
-// List all users (for login picker)
-router.get("/auth/users", async (_req: Request, res: Response) => {
-  const users = await db
-    .select()
-    .from(usersTable)
-    .orderBy(usersTable.createdAt);
-  res.json(
-    users.map((u) => ({
-      id: u.id,
-      username: u.username,
-      firstName: u.firstName,
-      lastName: u.lastName,
-      email: u.email,
-      profileImage: u.profileImage,
-      role: u.role,
-    })),
-  );
-});
-
-// Login as a specific user
+// Login with email + password
 router.post("/auth/login", async (req: Request, res: Response) => {
-  const { userId } = req.body;
-  if (!userId) {
-    res.status(400).json({ error: "userId is required" });
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    res.status(400).json({ error: "Email and password are required" });
     return;
   }
 
   const [user] = await db
     .select()
     .from(usersTable)
-    .where(eq(usersTable.id, userId))
+    .where(eq(usersTable.email, email.toLowerCase().trim()))
     .limit(1);
 
-  if (!user) {
-    res.status(404).json({ error: "User not found" });
+  if (!user || !user.passwordHash) {
+    res.status(401).json({ error: "Invalid email or password" });
+    return;
+  }
+
+  const valid = await bcrypt.compare(password, user.passwordHash);
+  if (!valid) {
+    res.status(401).json({ error: "Invalid email or password" });
     return;
   }
 
@@ -104,24 +77,29 @@ router.post("/auth/login", async (req: Request, res: Response) => {
   const sid = await createSession(sessionData);
   setSessionCookie(res, sid);
 
+  res.json({ authenticated: true, user: formatUserResponse(user) });
+});
+
+// Get current authenticated user
+router.get("/auth/user", async (req: Request, res: Response) => {
+  if (!req.isAuthenticated()) {
+    res.json({ authenticated: false, user: null });
+    return;
+  }
+
+  const [dbUser] = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.id, req.user.id))
+    .limit(1);
+
   res.json({
     authenticated: true,
-    user: {
-      id: user.id,
-      replitId: user.replitId,
-      username: user.username,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      email: user.email,
-      profileImage: user.profileImage,
-      role: user.role,
-      hourlyRate: user.hourlyRate ? parseFloat(user.hourlyRate) : null,
-      createdAt: user.createdAt.toISOString(),
-    },
+    user: dbUser ? formatUserResponse(dbUser) : req.user,
   });
 });
 
-// Extension token — returns the session ID for the Chrome extension
+// Extension token — returns session ID for Chrome extension
 router.get("/auth/extension-token", async (req: Request, res: Response) => {
   if (!req.isAuthenticated()) {
     res.status(401).json({ error: "Not authenticated" });
@@ -162,7 +140,6 @@ router.post("/auth/logout", async (req: Request, res: Response) => {
   res.json({ success: true });
 });
 
-// Keep GET /logout for backwards compat (redirects to login page)
 router.get("/logout", async (req: Request, res: Response) => {
   const sid = getSessionId(req);
   await clearSession(res, sid);

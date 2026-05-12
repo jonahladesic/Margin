@@ -25,9 +25,11 @@ function notify() {
 
 async function fetchCurrentUser(): Promise<AppUser | null> {
   try {
-    const res = await fetch("/api/current-user");
+    const res = await fetch("/api/auth/user", { credentials: "include" });
     if (!res.ok) return null;
-    return await res.json();
+    const data = await res.json();
+    if (!data.authenticated) return null;
+    return data.user;
   } catch {
     return null;
   }
@@ -53,8 +55,8 @@ async function doInitialFetch() {
 }
 
 /**
- * Hook to get the current user + role switching.
- * Uses module-level shared state to avoid React Query dependency issues.
+ * Hook to get the current user.
+ * Uses module-level shared state so all consumers stay in sync.
  */
 export function useCurrentUser() {
   const [, setTick] = useState(0);
@@ -66,22 +68,16 @@ export function useCurrentUser() {
     return () => { _listeners.delete(listener); };
   }, []);
 
-  const switchUser = useCallback(async (userId: string) => {
+  const logout = useCallback(async () => {
     try {
-      const res = await fetch("/api/dev/switch-user", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId }),
-      });
-      if (!res.ok) return;
-      const newUser = await res.json();
-      _user = newUser;
-      notify();
-      // Also reload the page to refresh all data for the new user
-      window.location.reload();
+      await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
     } catch {
       // ignore
     }
+    _user = null;
+    _initialFetchDone = false;
+    notify();
+    window.location.href = "/login";
   }, []);
 
   const role = _user?.role ?? "designer";
@@ -93,7 +89,6 @@ export function useCurrentUser() {
     isDesigner: role === "designer",
     isPM: role === "pm",
     isAdmin: role === "admin",
-    switchUser,
-    isSwitching: false,
+    logout,
   };
 }

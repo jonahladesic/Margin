@@ -12,6 +12,7 @@
     "@workspace/api-zod": "workspace:*",
     "@workspace/bqe-core": "workspace:*",
     "@workspace/db": "workspace:*",
+    "bcryptjs": "^3.0.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2",
     "drizzle-orm": "catalog:",
@@ -19,6 +20,7 @@
     "jspdf": "^4.2.1"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^3.0.0",
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",

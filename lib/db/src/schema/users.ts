@@ -12,6 +12,7 @@ export const usersTable = pgTable("users", {
   lastName: text("last_name"),
   email: text("email"),
   profileImage: text("profile_image"),
+  passwordHash: text("password_hash"),
   role: userRoleEnum("role").notNull().default("designer"),
   hourlyRate: numeric("hourly_rate", { precision: 10, scale: 2 }),
   createdAt: timestamp("created_at").notNull().defaultNow(),

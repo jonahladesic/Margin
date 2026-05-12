@@ -38,6 +38,7 @@ const allowlist = [
   "zod-validation-error",
   "crypto",
   "jspdf",
+  "bcryptjs",
 ];
 
 async function buildAll() {

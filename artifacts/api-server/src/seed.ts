@@ -2,6 +2,7 @@ import { db } from "@workspace/db";
 import { projectsTable, phasesTable, usersTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
+import bcrypt from "bcryptjs";
 
 const INTERNAL_COLOR = "#E8772E";
 const INTERNAL_PHASES = [
@@ -12,7 +13,9 @@ const INTERNAL_PHASES = [
   "Other",
 ];
 
-/** Seed test users for dev-mode role switching */
+const DEFAULT_PASSWORD = "password123";
+
+/** Seed test users with passwords */
 const TEST_USERS = [
   {
     id: "user-admin-001",
@@ -29,7 +32,7 @@ const TEST_USERS = [
     username: "sarah.pm",
     firstName: "Sarah",
     lastName: "Chen",
-    email: "sarah.chen@example.com",
+    email: "sarah@margin.test",
     role: "pm" as const,
   },
   {
@@ -38,7 +41,7 @@ const TEST_USERS = [
     username: "james.designer",
     firstName: "James",
     lastName: "Rivera",
-    email: "james.rivera@example.com",
+    email: "james@margin.test",
     role: "designer" as const,
   },
   {
@@ -47,12 +50,14 @@ const TEST_USERS = [
     username: "maya.designer",
     firstName: "Maya",
     lastName: "Patel",
-    email: "maya.patel@example.com",
+    email: "maya@margin.test",
     role: "designer" as const,
   },
 ];
 
 export async function seedTestUsers() {
+  const passwordHash = await bcrypt.hash(DEFAULT_PASSWORD, 10);
+
   for (const user of TEST_USERS) {
     const existing = await db
       .select()
@@ -60,8 +65,14 @@ export async function seedTestUsers() {
       .where(eq(usersTable.id, user.id))
       .limit(1);
     if (existing.length === 0) {
-      await db.insert(usersTable).values(user);
-      console.log(`Seeded test user: ${user.firstName} ${user.lastName} (${user.role})`);
+      await db.insert(usersTable).values({ ...user, passwordHash });
+      console.log(`Seeded user: ${user.firstName} ${user.lastName} (${user.role})`);
+    } else if (!existing[0].passwordHash) {
+      // Backfill password for existing users without one
+      await db.update(usersTable)
+        .set({ passwordHash })
+        .where(eq(usersTable.id, user.id));
+      console.log(`Set password for: ${user.firstName} ${user.lastName}`);
     }
   }
 }
