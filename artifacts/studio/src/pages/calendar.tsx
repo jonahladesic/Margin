@@ -651,8 +651,7 @@ export default function Calendar() {
         toast({ title: "Please enter a meeting title", variant: "destructive" });
         return;
       }
-      // Find internal project for meeting context
-      const internalProject = internalProject;
+      // Use the internal project for meeting context
       createMeeting.mutate({
         title: meetingForm.title,
         organizerId: effectiveUserId || currentUser?.id || "",

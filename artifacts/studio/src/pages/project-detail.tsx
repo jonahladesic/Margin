@@ -251,9 +251,9 @@ export default function ProjectDetail() {
 
   const { data: project, isLoading: projectLoading } = useGetProject(id || "");
   const { data: clients = [] } = useListClients();
-  const { data: timeblocks = [] } = useListTimeBlocks({ request: { query: { projectId: id } } });
-  const { data: expenses = [] } = useListExpenses({ request: { query: { projectId: id } } });
-  const { data: invoices = [] } = useListInvoices({ request: { query: { projectId: id } } });
+  const { data: timeblocks = [] } = useListTimeBlocks({ projectId: id });
+  const { data: expenses = [] } = useListExpenses({ projectId: id });
+  const { data: invoices = [] } = useListInvoices({ projectId: id });
 
   const { data: phases = [], refetch: refetchPhases } = useQuery({
     queryKey: ["/api/projects", id, "phases"],
