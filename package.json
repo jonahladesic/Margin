@@ -3,12 +3,12 @@
   "version": "0.0.0",
   "license": "MIT",
   "scripts": {
-"build": "pnpm run typecheck && pnpm --filter @workspace/api-server run build && pnpm --filter @workspace/studio run build",
+    "start": "node artifacts/api-server/dist/index.cjs",
+    "build": "pnpm run typecheck && pnpm --filter @workspace/api-server run build && pnpm --filter @workspace/studio run build",
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
   },
   "private": true,
-  "packageManager": "pnpm@10.32.1",
   "engines": {
     "node": ">=20.0.0"
   },
