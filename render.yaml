@@ -2,7 +2,7 @@ services:
   - type: web
     name: studio-os
     runtime: node
-    buildCommand: pnpm install --no-frozen-lockfile && cd artifacts/api-server && pnpm run build && cd ../studio && pnpm run build
+    buildCommand: corepack enable && pnpm install --no-frozen-lockfile && cd artifacts/api-server && pnpm run build && cd ../studio && pnpm run build
     startCommand: node artifacts/api-server/dist/index.cjs
     envVars:
       - key: DATABASE_URL
