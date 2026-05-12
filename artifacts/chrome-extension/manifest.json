@@ -6,6 +6,7 @@
   "permissions": ["storage", "activeTab", "cookies"],
   "host_permissions": [
     "https://calendar.google.com/*",
+    "https://rsm-design-os.onrender.com/*",
     "http://localhost:3000/*",
     "http://localhost:4001/*"
   ],

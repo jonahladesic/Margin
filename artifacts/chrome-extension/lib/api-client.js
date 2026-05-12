@@ -6,7 +6,7 @@
     API_BASE: 'tp_api_base',    // e.g. "http://localhost:4001"
   };
 
-  const DEFAULT_API_BASE = 'http://localhost:4001';
+  const DEFAULT_API_BASE = 'https://rsm-design-os.onrender.com';
 
   // Read a value from chrome.storage.local (returns a promise)
   function storageGet(key) {

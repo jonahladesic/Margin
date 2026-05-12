@@ -57,7 +57,7 @@
     // Open the Margin login page for the user to authenticate
     openLoginPage: async function () {
       const result = await storageGet(STORAGE_KEYS.API_BASE);
-      const base = result[STORAGE_KEYS.API_BASE] || 'http://localhost:4001';
+      const base = result[STORAGE_KEYS.API_BASE] || 'https://rsm-design-os.onrender.com';
       // Open the login page — after sign-in completes, user returns to the app
       // Then they click "Connect Extension" which calls /auth/extension-token
       chrome.tabs.create({ url: base + '/login' });
@@ -68,7 +68,7 @@
     fetchExtensionToken: async function () {
       try {
         const result = await storageGet(STORAGE_KEYS.API_BASE);
-        const base = result[STORAGE_KEYS.API_BASE] || 'http://localhost:4001';
+        const base = result[STORAGE_KEYS.API_BASE] || 'https://rsm-design-os.onrender.com';
         const res = await fetch(base + '/api/auth/extension-token', {
           credentials: 'include',
         });
@@ -95,7 +95,7 @@
     // Get the current API base URL
     getApiBase: async function () {
       const result = await storageGet(STORAGE_KEYS.API_BASE);
-      return result[STORAGE_KEYS.API_BASE] || 'http://localhost:4001';
+      return result[STORAGE_KEYS.API_BASE] || 'https://rsm-design-os.onrender.com';
     },
   };
 })(window.__gcalPT);
