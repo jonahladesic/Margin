@@ -551,6 +551,9 @@
     if (ns.dragToCreate) {
       panelEl.querySelectorAll('.tp-draggable').forEach((el) => {
         el.addEventListener('dragstart', (e) => {
+          // Stop propagation so phase rows don't bubble to parent card
+          e.stopPropagation();
+
           const title = el.dataset.dragTitle || 'FOCUS:';
           const color = el.dataset.dragColor || '#6366f1';
           e.dataTransfer.setData('text/plain', title);
@@ -563,13 +566,13 @@
           ghost.style.background = color;
           document.body.appendChild(ghost);
           e.dataTransfer.setDragImage(ghost, 0, 0);
-          // Clean up ghost after a tick
           setTimeout(() => ghost.remove(), 0);
 
           ns.dragToCreate.setDragData({ title, projectColor: color });
         });
 
-        el.addEventListener('dragend', () => {
+        el.addEventListener('dragend', (e) => {
+          e.stopPropagation();
           if (ns.dragToCreate) ns.dragToCreate.clearDragData();
         });
       });
