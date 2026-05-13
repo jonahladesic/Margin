@@ -231,11 +231,24 @@
   white-space: nowrap;
 }
 
-/* Bar — full-width colored line under each project, no track */
+/* Bar — progress bar with track for allocated vs logged */
+.tp-bar-track {
+  display: flex;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+}
+
 .tp-bar-fill {
   height: 5px;
   border-radius: 3px;
   transition: width 0.3s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.tp-bar-overflow {
+  height: 5px;
+  border-radius: 0 3px 3px 0;
 }
 
 /* Phase rows — indented under project */
@@ -441,6 +454,10 @@
 
   .tp-sidebar-widget .tp-team-bar-wrap {
     background: #3e4044;
+  }
+
+  .tp-sidebar-widget .tp-bar-track {
+    background: rgba(255, 255, 255, 0.08);
   }
 
   .tp-team-toggle:hover .tp-team-toggle-label {

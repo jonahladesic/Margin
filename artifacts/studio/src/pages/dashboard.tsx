@@ -34,6 +34,16 @@ export default function Dashboard() {
     },
   });
 
+  // Fetch GCal hours for the current user
+  const { data: gcalHours } = useQuery({
+    queryKey: ["/api/gcal/hours", weekStartStr, weekEndStr],
+    queryFn: async () => {
+      const res = await fetch(`/api/gcal/hours?startDate=${weekStartStr}&endDate=${weekEndStr}`);
+      if (!res.ok) return { totalHours: 0, byProject: {} };
+      return res.json();
+    },
+  });
+
   const { data: utilization = [] } = useQuery({
     queryKey: ["/api/utilization", weekStartStr, weekEndStr],
     queryFn: async () => {
@@ -56,10 +66,13 @@ export default function Dashboard() {
     (sum: number, a: any) => sum + (parseFloat(a.allocatedHours) || 0),
     0
   );
-  const myLoggedHours = myAllocations.reduce(
+  // Logged hours = manual timeblock hours + GCal assignment hours
+  const myTimeblockHours = myAllocations.reduce(
     (sum: number, a: any) => sum + (parseFloat(a.loggedHours) || 0),
     0
   );
+  const myGcalHours = gcalHours?.totalHours || 0;
+  const myLoggedHours = myTimeblockHours + myGcalHours;
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">

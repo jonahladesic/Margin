@@ -144,12 +144,12 @@
       }
     },
 
-    assignEvent: async function (eventKey, projectId, phaseId) {
+    assignEvent: async function (eventKey, projectId, phaseId, eventData) {
       // Write-through: API first, then cache
       try {
         const hasSession = await ns.apiClient.hasSession();
         if (hasSession) {
-          await ns.apiClient.putAssignment(eventKey, projectId, phaseId || null);
+          await ns.apiClient.putAssignment(eventKey, projectId, phaseId || null, eventData || null);
         }
       } catch (err) {
         console.warn('[TimePalette] Failed to sync assignment to API:', err.message);
@@ -186,17 +186,23 @@
     },
 
     // Bulk save assignments (used by auto-match)
-    saveAssignments: async function (assignments) {
+    // enrichedEntries: optional array of { eventKey, projectId, durationHours, eventTitle, eventDate }
+    saveAssignments: async function (assignments, enrichedEntries) {
       // Sync to API in bulk
       try {
         const hasSession = await ns.apiClient.hasSession();
         if (hasSession) {
-          // Convert simple map { eventKey: projectId } to API shape
-          const apiShape = {};
-          for (const [key, projectId] of Object.entries(assignments)) {
-            apiShape[key] = { projectId };
+          if (enrichedEntries && enrichedEntries.length > 0) {
+            // Use array format with event data
+            await ns.apiClient.bulkPutAssignments(enrichedEntries);
+          } else {
+            // Legacy: convert simple map { eventKey: projectId } to API shape
+            const apiShape = {};
+            for (const [key, projectId] of Object.entries(assignments)) {
+              apiShape[key] = { projectId };
+            }
+            await ns.apiClient.bulkPutAssignments(apiShape);
           }
-          await ns.apiClient.bulkPutAssignments(apiShape);
         }
       } catch (err) {
         console.warn('[TimePalette] Failed to bulk-sync assignments to API:', err.message);

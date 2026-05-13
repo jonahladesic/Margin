@@ -53,6 +53,7 @@
     const seen = new Set();
     let assignedCount = 0;
     const updated = { ...assignments };
+    const newAssignments = []; // Array of { eventKey, projectId, durationHours, eventTitle, eventDate }
     const unmatched = [];
 
     for (const ev of events) {
@@ -83,6 +84,13 @@
 
       if (best) {
         updated[ev.eventKey] = best.id;
+        newAssignments.push({
+          eventKey: ev.eventKey,
+          projectId: best.id,
+          durationHours: ev.durationHours || 0,
+          eventTitle: ev.title || '',
+          eventDate: ev.date || '',
+        });
         assignedCount++;
         if (DEBUG) console.log('[TimePalette] Auto-match ✓', rawTitle, '→', best.name);
       } else if (DEBUG) {
@@ -91,7 +99,7 @@
     }
 
     if (assignedCount > 0) {
-      await ns.storage.saveAssignments(updated);
+      await ns.storage.saveAssignments(updated, newAssignments);
       refresh();
     }
 

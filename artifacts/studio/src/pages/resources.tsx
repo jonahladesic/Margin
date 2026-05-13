@@ -1,15 +1,11 @@
 import { useState } from "react";
 import { format } from "date-fns";
-import { useAuth } from "@workspace/replit-auth-web";
-import {
-  useListAllocations, useListTimeBlocks, useListProjects,
-  useCreateAllocation, useListProjectPhases,
-} from "@workspace/api-client-react";
+import { useCurrentUser } from "@/contexts/auth-context";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -18,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { startOfWeek, endOfWeek, addWeeks, subWeeks } from "date-fns";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 
 const DEFAULT_ALLOC = {
@@ -26,7 +22,7 @@ const DEFAULT_ALLOC = {
 };
 
 export default function Resources() {
-  const { user } = useAuth();
+  const { user } = useCurrentUser();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -37,17 +33,43 @@ export default function Resources() {
 
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
   const weekEnd = endOfWeek(currentDate, { weekStartsOn: 1 });
+  const weekStartStr = format(weekStart, "yyyy-MM-dd");
+  const weekEndStr = format(weekEnd, "yyyy-MM-dd");
 
   const nextWeek = () => setCurrentDate(addWeeks(currentDate, 1));
   const prevWeek = () => setCurrentDate(subWeeks(currentDate, 1));
   const today = () => setCurrentDate(new Date());
 
-  const { data: projects = [] } = useListProjects();
-  const createAllocation = useCreateAllocation();
+  const { data: projects = [] } = useQuery({
+    queryKey: ["/api/projects"],
+    queryFn: async () => {
+      const res = await fetch("/api/projects");
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
 
   // Fetch phases for selected project
-  const { data: phases = [] } = useListProjectPhases(allocForm.projectId || "none", {
-    query: { enabled: !!allocForm.projectId } as any,
+  const { data: phases = [] } = useQuery({
+    queryKey: ["/api/projects", allocForm.projectId, "phases"],
+    queryFn: async () => {
+      const res = await fetch(`/api/projects/${allocForm.projectId}/phases`);
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!allocForm.projectId,
+  });
+
+  const createAllocation = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await fetch("/api/allocations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error("Failed to create allocation");
+      return res.json();
+    },
   });
 
   const setAlloc = (k: string, v: any) => setAllocForm((f) => ({ ...f, [k]: v }));
@@ -57,8 +79,8 @@ export default function Resources() {
     setAssignUserName(userName);
     setAllocForm({
       ...DEFAULT_ALLOC,
-      startDate: format(weekStart, "yyyy-MM-dd"),
-      endDate: format(weekEnd, "yyyy-MM-dd"),
+      startDate: weekStartStr,
+      endDate: weekEndStr,
     });
     setAssignDialogOpen(true);
   };
@@ -70,15 +92,13 @@ export default function Resources() {
     }
     createAllocation.mutate(
       {
-        data: {
-          userId: assignUserId,
-          projectId: allocForm.projectId,
-          phaseId: allocForm.phaseId || undefined,
-          allocatedHours: Number(allocForm.allocatedHours),
-          startDate: allocForm.startDate,
-          endDate: allocForm.endDate,
-          notes: allocForm.notes || undefined,
-        } as any,
+        userId: assignUserId,
+        projectId: allocForm.projectId,
+        phaseId: allocForm.phaseId || undefined,
+        allocatedHours: Number(allocForm.allocatedHours),
+        startDate: allocForm.startDate,
+        endDate: allocForm.endDate,
+        notes: allocForm.notes || undefined,
       },
       {
         onSuccess: () => {
@@ -92,18 +112,17 @@ export default function Resources() {
     );
   };
 
-  // Using custom fetch for utilization to match API endpoint since it might not be a generated hook
   const { data: utilizations = [], isLoading } = useQuery({
-    queryKey: ["/api/utilization", weekStart.toISOString(), weekEnd.toISOString()],
+    queryKey: ["/api/utilization", weekStartStr, weekEndStr],
     queryFn: async () => {
       const params = new URLSearchParams({
-        weekStart: weekStart.toISOString(),
-        weekEnd: weekEnd.toISOString()
+        weekStart: weekStartStr,
+        weekEnd: weekEndStr,
       });
       const res = await fetch(`/api/utilization?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch utilizations");
       return res.json() as Promise<any[]>;
-    }
+    },
   });
 
   return (
@@ -113,7 +132,7 @@ export default function Resources() {
           <h1 className="text-3xl font-bold tracking-tight">Resource Allocation</h1>
           <p className="text-muted-foreground mt-1">Manage team capacity and assignments.</p>
         </div>
-        
+
         <div className="flex items-center gap-2 bg-card rounded-md border p-1 shadow-sm">
           <Button variant="ghost" size="icon" onClick={prevWeek} className="h-8 w-8">
             <ChevronLeft className="h-4 w-4" />
@@ -132,23 +151,22 @@ export default function Resources() {
           <div>Team Member</div>
           <div>Weekly Allocation</div>
         </div>
-        
+
         {isLoading ? (
           <div className="p-8 text-center text-muted-foreground">Loading utilization data...</div>
         ) : utilizations.length === 0 ? (
-          <div className="p-8 text-center text-muted-foreground">No resources found.</div>
+          <div className="p-8 text-center text-muted-foreground">No team members found.</div>
         ) : (
           <div className="divide-y">
             {utilizations.map((u: any) => {
               const isOver = u.status === 'over';
               const isUnder = u.status === 'under';
-              
+
               return (
                 <div key={u.userId} className="grid grid-cols-[250px_1fr] p-4 items-center gap-6">
                   <div className="flex items-center gap-3">
                     <Avatar className="h-10 w-10 border border-border">
-                      <AvatarImage src={u.profileImage} />
-                      <AvatarFallback>{u.userName.charAt(0)}</AvatarFallback>
+                      <AvatarFallback>{u.userName?.charAt(0) || "?"}</AvatarFallback>
                     </Avatar>
                     <div className="flex flex-col">
                       <span className="font-semibold">{u.userName}</span>
@@ -157,19 +175,19 @@ export default function Resources() {
                       </span>
                     </div>
                   </div>
-                  
+
                   <div className="flex flex-col gap-2">
-                    <Progress 
-                      value={Math.min((u.allocatedHours / u.targetHours) * 100, 100)} 
+                    <Progress
+                      value={Math.min((u.allocatedHours / u.targetHours) * 100, 100)}
                       className="h-3"
-                      indicatorClassName={isOver ? 'bg-destructive' : isUnder ? 'bg-amber-500' : 'bg-emerald-500'} 
+                      indicatorClassName={isOver ? 'bg-destructive' : isUnder ? 'bg-amber-500' : 'bg-emerald-500'}
                     />
-                    
+
                     <div className="flex flex-wrap gap-2 mt-1">
                       {u.projects?.map((p: any) => (
-                        <div 
+                        <div
                           key={p.projectId}
-                          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs border bg-background font-medium shadow-xs"
+                          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs border bg-background font-medium"
                           style={{ borderColor: p.projectColor || 'var(--border)' }}
                         >
                           <div className="w-2 h-2 rounded-full" style={{ backgroundColor: p.projectColor || 'var(--primary)' }} />
@@ -178,7 +196,7 @@ export default function Resources() {
                       ))}
                       <Button
                         variant="outline" size="sm"
-                        className="h-6 text-xs px-2 no-default-hover-elevate"
+                        className="h-6 text-xs px-2"
                         onClick={() => openAssignDialog(u.userId, u.userName)}
                       >
                         + Assign

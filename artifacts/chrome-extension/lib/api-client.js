@@ -98,11 +98,17 @@
       return apiFetch('/gcal/assignments');
     },
 
-    // Upsert a single assignment
-    putAssignment: function (eventKey, projectId, phaseId) {
+    // Upsert a single assignment (with optional event metadata)
+    putAssignment: function (eventKey, projectId, phaseId, eventData) {
+      const body = { eventKey, projectId, phaseId: phaseId || null };
+      if (eventData) {
+        if (eventData.durationHours != null) body.durationHours = eventData.durationHours;
+        if (eventData.eventTitle) body.eventTitle = eventData.eventTitle;
+        if (eventData.eventDate) body.eventDate = eventData.eventDate;
+      }
       return apiFetch('/gcal/assignments', {
         method: 'PUT',
-        body: JSON.stringify({ eventKey, projectId, phaseId: phaseId || null }),
+        body: JSON.stringify(body),
       });
     },
 
@@ -114,11 +120,22 @@
     },
 
     // Bulk upsert assignments (for auto-match)
+    // Accepts either legacy object { [eventKey]: { projectId, phaseId? } }
+    // or array format [{ eventKey, projectId, phaseId?, durationHours?, eventTitle?, eventDate? }]
     bulkPutAssignments: function (assignments) {
       return apiFetch('/gcal/assignments/bulk', {
         method: 'PUT',
         body: JSON.stringify({ assignments }),
       });
+    },
+
+    // Fetch allocations for the current user in a date range
+    fetchMyAllocations: function (startDate, endDate) {
+      const params = new URLSearchParams({
+        weekStart: startDate instanceof Date ? startDate.toISOString().slice(0, 10) : startDate,
+        weekEnd: endDate instanceof Date ? endDate.toISOString().slice(0, 10) : endDate,
+      });
+      return apiFetch('/allocations?' + params.toString());
     },
 
     // Fetch team utilization for a week

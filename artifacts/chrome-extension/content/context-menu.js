@@ -195,7 +195,11 @@
 
   async function assignToProject(projectId, phaseId) {
     if (!currentEventData) return;
-    await ns.storage.assignEvent(currentEventData.eventKey, projectId, phaseId);
+    await ns.storage.assignEvent(currentEventData.eventKey, projectId, phaseId, {
+      durationHours: currentEventData.durationHours || 0,
+      eventTitle: currentEventData.title || '',
+      eventDate: currentEventData.date || '',
+    });
     closeMenu();
     if (onAssignCallback) onAssignCallback();
   }

@@ -6,8 +6,9 @@ import {
   projectsTable,
   phasesTable,
   timeBlocksTable,
+  gcalAssignmentsTable,
 } from "@workspace/db/schema";
-import { and, eq, gte, lte, sql } from "drizzle-orm";
+import { and, eq, gte, lte, sql, isNotNull } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
 const router: IRouter = Router();
@@ -170,6 +171,7 @@ router.get("/utilization", async (req, res) => {
 
       const allocatedHours = allocs.reduce((sum, a) => sum + parseFloat(a.allocatedHours), 0);
 
+      // Sum hours from manual timeblocks
       const loggedResult = await db
         .select({ total: sql<string>`coalesce(sum(${timeBlocksTable.hours}), 0)` })
         .from(timeBlocksTable)
@@ -180,7 +182,23 @@ router.get("/utilization", async (req, res) => {
             lte(timeBlocksTable.date, weekEnd)
           )
         );
-      const loggedHours = parseFloat(loggedResult[0]?.total ?? "0");
+      const timeblockHours = parseFloat(loggedResult[0]?.total ?? "0");
+
+      // Sum hours from GCal assignments
+      const gcalResult = await db
+        .select({ total: sql<string>`coalesce(sum(${gcalAssignmentsTable.durationHours}), 0)` })
+        .from(gcalAssignmentsTable)
+        .where(
+          and(
+            eq(gcalAssignmentsTable.userId, user.id),
+            isNotNull(gcalAssignmentsTable.durationHours),
+            gte(gcalAssignmentsTable.eventDate, weekStart),
+            lte(gcalAssignmentsTable.eventDate, weekEnd)
+          )
+        );
+      const gcalHours = parseFloat(gcalResult[0]?.total ?? "0");
+
+      const loggedHours = timeblockHours + gcalHours;
       const targetHours = 40;
       const utilizationPercent = Math.round((allocatedHours / targetHours) * 100);
       const status =
