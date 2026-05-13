@@ -1,7 +1,7 @@
 /* ==== Time Palette — Injected Styles ==== */
 
 .tp-context-menu,
-.tp-sidebar-widget {
+.tp-panel {
   --tp-bg: #ffffff;
   --tp-bg-hover: #f3f4f6;
   --tp-bg-active: #eef2ff;
@@ -162,15 +162,11 @@
   text-align: center;
 }
 
-/* ---- Sidebar Widget ----
- * Horizontal margins are applied INLINE by content/sidebar-widget.js
- * (applyNativeMargins) — they're measured at runtime from a native
- * sibling section so the widget's left/right edges match GCal's native
- * inset exactly. We use margin rather than padding because GCal's sidebar
- * stretches direct children to full width; only moving the widget's outer
- * box (margin) actually insets the content visually.
- */
-.tp-sidebar-widget {
+
+/* ================================================================
+ * SIDEBAR STRIP — slim element inside GCal sidebar
+ * ================================================================ */
+.tp-sidebar-strip {
   background: transparent !important;
   border: none !important;
   border-radius: 0 !important;
@@ -178,38 +174,300 @@
   font-family: 'Google Sans', 'Google Sans Display', 'Roboto', Arial, sans-serif;
   color: #1f1f1f;
   -webkit-font-smoothing: antialiased;
+  cursor: pointer;
 }
 
-.tp-widget-empty {
-  padding: 2px 0;
-  font-size: 13px;
-  line-height: 18px;
-  color: #5f6368;
-}
-
-/* Project rows */
-.tp-project-list {
+.tp-strip-inner {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 4px;
+  border-radius: 8px;
+  transition: background 0.15s;
 }
 
-.tp-project-row {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+.tp-sidebar-strip:hover .tp-strip-inner {
+  background: rgba(0, 0, 0, 0.04);
 }
 
-.tp-project-info {
+.tp-strip-left {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.tp-strip-icon {
+  width: 16px;
+  height: 16px;
+  color: #5f6368;
+  flex-shrink: 0;
+}
+
+.tp-strip-label {
   font-size: 13px;
-  line-height: 18px;
+  font-weight: 500;
+  color: #1f1f1f;
+  letter-spacing: -0.01em;
+}
+
+.tp-strip-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tp-strip-hours {
+  font-size: 13px;
+  color: #5f6368;
+  font-variant-numeric: tabular-nums;
+}
+
+.tp-strip-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: none;
+  border-radius: 50%;
+  color: #5f6368;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  padding: 0;
+}
+
+.tp-strip-btn:hover {
+  background: rgba(0, 0, 0, 0.08);
+  color: #1f1f1f;
+}
+
+
+/* ================================================================
+ * PANEL BACKDROP
+ * ================================================================ */
+.tp-panel-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 99990;
+  background: rgba(0, 0, 0, 0.18);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.22s ease;
+}
+
+.tp-panel-backdrop.tp-backdrop-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+
+/* ================================================================
+ * SLIDE-OUT PANEL — 380px, right edge
+ * ================================================================ */
+.tp-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 99991;
+  width: 380px;
+  max-width: 90vw;
+  background: var(--tp-bg);
+  box-shadow: -8px 0 30px rgba(0, 0, 0, 0.12), -1px 0 0 rgba(0, 0, 0, 0.06);
+  transform: translateX(100%);
+  transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+  overflow-y: auto;
+  overflow-x: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
+  font-size: 13px;
+  color: var(--tp-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+.tp-panel.tp-panel-open {
+  transform: translateX(0);
+}
+
+/* Scrollbar styling */
+.tp-panel::-webkit-scrollbar {
+  width: 6px;
+}
+.tp-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+.tp-panel::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.12);
+  border-radius: 3px;
+}
+.tp-panel::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+
+/* ── Panel Header ── */
+.tp-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 20px 0;
+  position: sticky;
+  top: 0;
+  background: var(--tp-bg);
+  z-index: 2;
+  padding-bottom: 16px;
+}
+
+.tp-panel-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tp-panel-title {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--tp-text);
+}
+
+.tp-panel-view-label {
+  font-size: 12px;
+  color: var(--tp-text-muted);
   font-weight: 400;
 }
 
-.tp-dot {
+.tp-panel-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: none;
+  border-radius: 8px;
+  color: var(--tp-text-muted);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.tp-panel-close:hover {
+  background: var(--tp-bg-hover);
+  color: var(--tp-text);
+}
+
+
+/* ── Summary bar ── */
+.tp-panel-summary {
+  margin: 0 20px 20px;
+  padding: 14px 16px;
+  background: #f8f9fb;
+  border-radius: 10px;
+}
+
+.tp-panel-summary-numbers {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.tp-panel-summary-primary {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.tp-panel-summary-secondary {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.tp-panel-summary-value {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--tp-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.tp-panel-summary-unit {
+  font-size: 12px;
+  color: var(--tp-text-muted);
+  font-weight: 400;
+}
+
+.tp-panel-summary-sep {
+  font-size: 16px;
+  color: var(--tp-text-subtle);
+  margin: 0 2px;
+}
+
+.tp-panel-summary-bar {
+  height: 5px;
+  background: rgba(0, 0, 0, 0.06);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 10px;
+}
+
+.tp-panel-summary-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.tp-panel-summary-pct {
+  font-size: 11px;
+  color: var(--tp-text-muted);
+  margin-top: 4px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+
+/* ── Section label ── */
+.tp-panel-section-label {
+  padding: 0 20px;
+  margin-bottom: 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--tp-text-subtle);
+}
+
+
+/* ── Project cards ── */
+.tp-panel-cards {
+  padding: 0 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tp-panel-card {
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--tp-border);
+  background: var(--tp-bg);
+  transition: background 0.12s;
+}
+
+.tp-panel-card:hover {
+  background: #fafbfc;
+}
+
+.tp-panel-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tp-panel-card-dot {
   width: 10px;
   height: 10px;
   border-radius: 50%;
@@ -217,124 +475,132 @@
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
 }
 
-.tp-project-label {
+.tp-panel-card-name {
   flex: 1;
-  color: #1f1f1f;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tp-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  letter-spacing: -0.01em;
 }
 
-.tp-project-hours {
-  color: #1f1f1f;
+.tp-panel-card-hours {
+  font-size: 13px;
+  color: var(--tp-text);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  font-weight: 500;
 }
 
-/* Bar — progress bar with track for allocated vs logged */
-.tp-bar-track {
-  display: flex;
-  height: 5px;
-  border-radius: 3px;
+.tp-panel-card-bar-track {
+  height: 4px;
   background: rgba(0, 0, 0, 0.06);
+  border-radius: 2px;
   overflow: hidden;
+  margin-top: 8px;
 }
 
-.tp-bar-fill {
-  height: 5px;
-  border-radius: 3px;
+.tp-panel-card-bar-fill {
+  height: 100%;
+  border-radius: 2px;
   transition: width 0.3s cubic-bezier(0.2, 0, 0, 1);
 }
 
-.tp-bar-overflow {
-  height: 5px;
-  border-radius: 0 3px 3px 0;
+.tp-panel-card-status {
+  font-size: 11px;
+  margin-top: 4px;
+  font-weight: 500;
 }
 
-/* Phase rows — indented under project */
-.tp-phase-row {
+.tp-status-over { color: #ef4444; }
+.tp-status-good { color: #10b981; }
+.tp-status-under { color: var(--tp-text-muted); }
+
+
+/* ── Phase rows inside project cards ── */
+.tp-panel-phases {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tp-panel-phase-row {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding-left: 18px;
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 16px;
-  color: #5f6368;
-  margin-top: -4px;
+  color: var(--tp-text-muted);
 }
 
-.tp-phase-border {
+.tp-panel-phase-border {
   width: 2px;
   height: 12px;
   border-left: 2px solid;
   flex-shrink: 0;
 }
 
-.tp-phase-label {
+.tp-panel-phase-label {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.tp-phase-hours {
+.tp-panel-phase-hours {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-/* Total row */
-.tp-total-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 14px;
-  font-size: 13px;
-  line-height: 18px;
-  color: #1f1f1f;
-  font-variant-numeric: tabular-nums;
+
+/* ── Empty state ── */
+.tp-panel-empty {
+  padding: 24px 20px;
+  text-align: center;
+  color: var(--tp-text-muted);
+  font-size: 12.5px;
+  line-height: 1.6;
 }
 
-.tp-total-label {
-  font-weight: 400;
-}
 
-.tp-total-hours {
-  font-weight: 400;
-}
-
-/* ---- Team toggle + section ---- */
-.tp-team-toggle {
-  margin-top: 12px;
-  padding: 6px 0;
+/* ── Team toggle + section ── */
+.tp-panel-team-toggle {
+  margin: 16px 20px 0;
+  padding: 8px 0;
   text-align: center;
   cursor: pointer;
   user-select: none;
 }
 
-.tp-team-toggle-label {
+.tp-panel-team-toggle-label {
   font-size: 11px;
   font-weight: 500;
-  color: #5f6368;
+  color: var(--tp-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  padding: 3px 10px;
+  padding: 4px 12px;
   border-radius: 10px;
   transition: background 0.15s, color 0.15s;
 }
 
-.tp-team-toggle:hover .tp-team-toggle-label {
-  background: rgba(0, 0, 0, 0.04);
-  color: #1f1f1f;
+.tp-panel-team-toggle:hover .tp-panel-team-toggle-label {
+  background: var(--tp-bg-hover);
+  color: var(--tp-text);
 }
 
-.tp-team-section {
-  margin-top: 8px;
+.tp-panel-team-section {
+  margin: 8px 20px 20px;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.tp-team-row {
+.tp-panel-team-row {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -342,16 +608,17 @@
   line-height: 16px;
 }
 
-.tp-team-name {
-  width: 60px;
+.tp-panel-team-name {
+  width: 80px;
   flex-shrink: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #1f1f1f;
+  color: var(--tp-text);
+  font-weight: 500;
 }
 
-.tp-team-bar-wrap {
+.tp-panel-team-bar-wrap {
   flex: 1;
   height: 6px;
   background: #f3f4f6;
@@ -359,35 +626,31 @@
   overflow: hidden;
 }
 
-.tp-team-bar {
+.tp-panel-team-bar {
   height: 100%;
   border-radius: 3px;
   transition: width 0.3s cubic-bezier(0.2, 0, 0, 1);
 }
 
-.tp-team-hours {
+.tp-panel-team-hours {
   font-size: 11px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  color: #5f6368;
-  min-width: 48px;
+  color: var(--tp-text-muted);
+  min-width: 52px;
   text-align: right;
 }
 
-/* ---- Event coloring overrides ----
+
+/* ================================================================
+ * EVENT COLORING OVERRIDES
  *
  * Two-tier painting:
  *   (a) The chip root + descendants that JS has tagged [data-tp-paint]
  *       get the project background color. JS tags ONLY descendants whose
- *       native background was non-transparent — i.e. the real color layers
- *       (invited/Zoom events put color on a nested child). This leaves
- *       overlay layers (absolutely-positioned children that sit above the
- *       text) with their natural transparent background, so text stays
- *       visible.
- *   (b) ALL descendants still inherit the contrast-matched text color,
- *       so whatever wrapper holds the title reads correctly against the
- *       painted background.
- */
+ *       native background was non-transparent.
+ *   (b) ALL descendants still inherit the contrast-matched text color.
+ * ================================================================ */
 [data-tp-project],
 [data-tp-paint] {
   background-color: var(--tp-color) !important;
@@ -400,17 +663,18 @@
   color: var(--tp-text) !important;
 }
 
-/* Keep the chip's rounded corners. JS reads the chip's effective radius at
- * apply-time and sets --tp-radius on the root. */
 [data-tp-project],
 [data-tp-paint] {
   border-radius: var(--tp-radius, 4px) !important;
 }
 
-/* ---- Dark mode ---- */
+
+/* ================================================================
+ * DARK MODE
+ * ================================================================ */
 @media (prefers-color-scheme: dark) {
   .tp-context-menu,
-  .tp-sidebar-widget {
+  .tp-panel {
     --tp-bg: #2a2b2e;
     --tp-bg-hover: #34363a;
     --tp-bg-active: #353867;
@@ -425,44 +689,89 @@
                      0 0 0 1px rgba(255, 255, 255, 0.06);
   }
 
-  .tp-sidebar-widget {
+  /* Strip */
+  .tp-sidebar-strip {
     color: #e3e3e3;
   }
 
-  .tp-sidebar-widget .tp-project-label,
-  .tp-sidebar-widget .tp-project-hours,
-  .tp-sidebar-widget .tp-total-row,
-  .tp-sidebar-widget .tp-widget-empty {
+  .tp-strip-label {
     color: #e3e3e3;
   }
 
-  .tp-sidebar-widget .tp-dot {
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12);
-  }
-
-  .tp-sidebar-widget .tp-phase-row {
+  .tp-strip-hours {
     color: #a1a5ab;
   }
 
-  .tp-sidebar-widget .tp-team-name {
-    color: #e3e3e3;
-  }
-
-  .tp-sidebar-widget .tp-team-hours {
+  .tp-strip-icon {
     color: #a1a5ab;
   }
 
-  .tp-sidebar-widget .tp-team-bar-wrap {
-    background: #3e4044;
+  .tp-strip-btn {
+    color: #a1a5ab;
   }
 
-  .tp-sidebar-widget .tp-bar-track {
+  .tp-strip-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #e3e3e3;
+  }
+
+  .tp-sidebar-strip:hover .tp-strip-inner {
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  /* Backdrop */
+  .tp-panel-backdrop {
+    background: rgba(0, 0, 0, 0.4);
+  }
+
+  /* Panel */
+  .tp-panel {
+    box-shadow: -8px 0 30px rgba(0, 0, 0, 0.4), -1px 0 0 rgba(255, 255, 255, 0.06);
+  }
+
+  .tp-panel-summary {
+    background: #34363a;
+  }
+
+  .tp-panel-summary-bar {
     background: rgba(255, 255, 255, 0.08);
   }
 
-  .tp-team-toggle:hover .tp-team-toggle-label {
+  .tp-panel-card {
+    border-color: #3e4044;
+  }
+
+  .tp-panel-card:hover {
+    background: #34363a;
+  }
+
+  .tp-panel-card-dot {
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12);
+  }
+
+  .tp-panel-card-bar-track {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .tp-panel-phases {
+    border-top-color: rgba(255, 255, 255, 0.06);
+  }
+
+  .tp-panel-team-bar-wrap {
+    background: #3e4044;
+  }
+
+  .tp-panel-team-toggle:hover .tp-panel-team-toggle-label {
     background: rgba(255, 255, 255, 0.06);
     color: #e3e3e3;
+  }
+
+  .tp-panel::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .tp-panel::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.18);
   }
 
   .tp-menu-item-active:hover { background: #3e427a; }

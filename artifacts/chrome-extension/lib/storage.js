@@ -271,6 +271,25 @@
       }
     },
 
+    // ── Panel state persistence ──
+    getPanelOpen: async function () {
+      const result = await safeGet(['tp_panel_open']);
+      return !!result.tp_panel_open;
+    },
+
+    setPanelOpen: async function (open) {
+      await safeSet({ tp_panel_open: !!open });
+    },
+
+    getTeamToggle: async function () {
+      const result = await safeGet(['tp_show_team']);
+      return !!result.tp_show_team;
+    },
+
+    setTeamToggle: async function (show) {
+      await safeSet({ tp_show_team: !!show });
+    },
+
     // Force-refresh all caches (e.g. after login)
     invalidateAll: async function () {
       await safeSet({
