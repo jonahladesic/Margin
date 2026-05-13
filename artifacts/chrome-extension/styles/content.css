@@ -154,6 +154,15 @@
   padding: 7px 10px;
 }
 
+.tp-menu-section-label {
+  padding: 8px 12px 3px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--tp-text-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
 .tp-menu-empty {
   padding: 14px 14px 16px;
   color: var(--tp-text-muted);

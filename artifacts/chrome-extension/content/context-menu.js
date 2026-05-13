@@ -33,6 +33,44 @@
     showMenu(e.clientX, e.clientY);
   }
 
+  // Allocation cache for context menu sorting
+  let cachedMenuAllocs = null;
+  let menuAllocsCacheTs = 0;
+  const MENU_ALLOC_TTL = 60000; // 60 s
+
+  async function getMyAllocatedProjectIds() {
+    try {
+      const viewRange = ns.viewDetector.getCurrentViewRange();
+      if (!viewRange || !viewRange.startDate || !viewRange.endDate) return new Set();
+
+      // Use cache if fresh
+      if (cachedMenuAllocs && (Date.now() - menuAllocsCacheTs) < MENU_ALLOC_TTL) {
+        return cachedMenuAllocs;
+      }
+
+      const hasSession = await ns.apiClient.hasSession();
+      if (!hasSession) return new Set();
+
+      const start = viewRange.startDate instanceof Date
+        ? viewRange.startDate.toISOString().slice(0, 10) : viewRange.startDate;
+      const end = viewRange.endDate instanceof Date
+        ? viewRange.endDate.toISOString().slice(0, 10) : viewRange.endDate;
+
+      const allocs = await ns.apiClient.fetchMyAllocations(start, end);
+      const ids = new Set();
+      if (Array.isArray(allocs)) {
+        for (const a of allocs) {
+          if (a.projectId) ids.add(a.projectId);
+        }
+      }
+      cachedMenuAllocs = ids;
+      menuAllocsCacheTs = Date.now();
+      return ids;
+    } catch (_) {
+      return cachedMenuAllocs || new Set();
+    }
+  }
+
   async function showMenu(x, y) {
     removeMenuDOM();
 
@@ -47,6 +85,20 @@
       const full = fullAssignments[currentEventData.eventKey];
       if (full && full.phaseId) currentPhaseId = full.phaseId;
     } catch (_) {}
+
+    // Fetch which projects have allocations for the current user
+    const allocatedIds = await getMyAllocatedProjectIds();
+
+    // Split into allocated (top) and other (bottom)
+    const allocatedProjects = [];
+    const otherProjects = [];
+    for (const p of projects) {
+      if (allocatedIds.has(p.id)) {
+        allocatedProjects.push(p);
+      } else {
+        otherProjects.push(p);
+      }
+    }
 
     menuEl = document.createElement('div');
     menuEl.className = 'tp-context-menu';
@@ -73,40 +125,30 @@
       empty.textContent = 'No projects. Create one in the Margin app.';
       menuEl.appendChild(empty);
     } else {
-      for (const project of projects) {
-        const item = document.createElement('div');
-        item.className = 'tp-menu-item tp-menu-item-project';
-        if (currentAssignment === project.id) {
-          item.classList.add('tp-menu-item-active');
+      // ── Allocated projects first ──
+      if (allocatedProjects.length > 0) {
+        const allocLabel = document.createElement('div');
+        allocLabel.className = 'tp-menu-section-label';
+        allocLabel.textContent = 'My Allocations';
+        menuEl.appendChild(allocLabel);
+
+        for (const project of allocatedProjects) {
+          menuEl.appendChild(buildProjectItem(project, currentAssignment, currentPhaseId));
+        }
+      }
+
+      // ── Other projects ──
+      if (otherProjects.length > 0) {
+        if (allocatedProjects.length > 0) {
+          const sep = document.createElement('div');
+          sep.className = 'tp-menu-section-label';
+          sep.textContent = 'Other Projects';
+          menuEl.appendChild(sep);
         }
 
-        item.innerHTML = `
-          <span class="tp-menu-dot" style="background:${ns.safeColor(project.color)}"></span>
-          <span class="tp-menu-label">${escapeHtml(project.name)}</span>
-          ${currentAssignment === project.id ? '<span class="tp-menu-check">✓</span>' : ''}
-          <span class="tp-menu-arrow">›</span>
-        `;
-
-        // Click the project row itself → assign to project (no phase)
-        item.addEventListener('click', (e) => {
-          // If clicking the arrow area or if we're showing phases, don't assign yet
-          if (e.target.closest('.tp-menu-arrow')) return;
-          assignToProject(project.id, null);
-        });
-
-        // Hover → show phase submenu
-        item.addEventListener('mouseenter', () => {
-          showPhaseSubmenu(item, project, currentPhaseId);
-        });
-        item.addEventListener('mouseleave', (e) => {
-          // Only hide if not moving to the submenu
-          const related = e.relatedTarget;
-          const sub = item.querySelector('.tp-phase-submenu');
-          if (sub && (sub === related || sub.contains(related))) return;
-          hidePhaseSubmenu(item);
-        });
-
-        menuEl.appendChild(item);
+        for (const project of otherProjects) {
+          menuEl.appendChild(buildProjectItem(project, currentAssignment, currentPhaseId));
+        }
       }
 
       // Unassign option
@@ -133,6 +175,38 @@
     const maxY = window.innerHeight - rect.height - 8;
     menuEl.style.left = Math.min(x, maxX) + 'px';
     menuEl.style.top = Math.min(y, maxY) + 'px';
+  }
+
+  function buildProjectItem(project, currentAssignment, currentPhaseId) {
+    const item = document.createElement('div');
+    item.className = 'tp-menu-item tp-menu-item-project';
+    if (currentAssignment === project.id) {
+      item.classList.add('tp-menu-item-active');
+    }
+
+    item.innerHTML = `
+      <span class="tp-menu-dot" style="background:${ns.safeColor(project.color)}"></span>
+      <span class="tp-menu-label">${escapeHtml(project.name)}</span>
+      ${currentAssignment === project.id ? '<span class="tp-menu-check">✓</span>' : ''}
+      <span class="tp-menu-arrow">›</span>
+    `;
+
+    item.addEventListener('click', (e) => {
+      if (e.target.closest('.tp-menu-arrow')) return;
+      assignToProject(project.id, null);
+    });
+
+    item.addEventListener('mouseenter', () => {
+      showPhaseSubmenu(item, project, currentPhaseId);
+    });
+    item.addEventListener('mouseleave', (e) => {
+      const related = e.relatedTarget;
+      const sub = item.querySelector('.tp-phase-submenu');
+      if (sub && (sub === related || sub.contains(related))) return;
+      hidePhaseSubmenu(item);
+    });
+
+    return item;
   }
 
   // Phase submenu — appears on hover over a project row

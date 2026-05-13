@@ -99,15 +99,30 @@
         } catch (_) {}
       }
 
-      // Fetch allocations
+      // Fetch allocations — store both project-level and phase-level totals
       let allocByProject = {};
+      let allocByPhase = {};   // { projectId: { phaseId: hours, __none__: hours } }
+      let allocPhaseNames = {}; // { phaseId: name } from allocation records
       if (viewRange && viewRange.startDate && viewRange.endDate) {
         try {
           const allocs = await fetchAllocations(viewRange.startDate, viewRange.endDate);
           if (allocs && Array.isArray(allocs)) {
             for (const a of allocs) {
+              const hours = parseFloat(a.allocatedHours) || 0;
               if (!allocByProject[a.projectId]) allocByProject[a.projectId] = 0;
-              allocByProject[a.projectId] += parseFloat(a.allocatedHours) || 0;
+              allocByProject[a.projectId] += hours;
+
+              // Phase-level allocation tracking
+              if (!allocByPhase[a.projectId]) allocByPhase[a.projectId] = {};
+              const phKey = a.phaseId || '__none__';
+              if (!allocByPhase[a.projectId][phKey]) allocByPhase[a.projectId][phKey] = 0;
+              allocByPhase[a.projectId][phKey] += hours;
+
+              // Capture phase name from allocation if available
+              if (a.phaseId && a.phaseName) {
+                allocPhaseNames[a.phaseId] = a.phaseName;
+                phaseNames[a.phaseId] = phaseNames[a.phaseId] || a.phaseName;
+              }
             }
           }
         } catch (err) {
@@ -128,7 +143,8 @@
       // Stash for re-render
       lastRenderData = {
         projects, projectMap, projectHours, projectEventCounts,
-        phaseHours, phaseNames, totalHours, viewRange, teamData, allocByProject,
+        phaseHours, phaseNames, totalHours, viewRange, teamData,
+        allocByProject, allocByPhase,
       };
 
       renderStrip(totalHours);
@@ -299,7 +315,8 @@
 
     const {
       projects, projectMap, projectHours, projectEventCounts,
-      phaseHours, phaseNames, totalHours, viewRange, teamData, allocByProject,
+      phaseHours, phaseNames, totalHours, viewRange, teamData,
+      allocByProject, allocByPhase,
     } = data;
 
     const isMonthView = viewRange && viewRange.viewType === 'month';
@@ -434,15 +451,31 @@
             ${statusText ? `<div class="tp-panel-card-status ${statusClass}">${statusText}</div>` : ''}
         `;
 
-        // Phase breakdown
+        // Phase breakdown — merge logged phases + allocated phases
         const projPhases = phaseHours[project.id] || {};
-        const phaseKeys = Object.keys(projPhases).filter((k) => k !== '__none__');
-        if (phaseKeys.length > 0) {
+        const projAllocPhases = (allocByPhase && allocByPhase[project.id]) || {};
+        // Collect all phase IDs that have either logged or allocated hours
+        const allPhaseIds = new Set([
+          ...Object.keys(projPhases).filter((k) => k !== '__none__'),
+          ...Object.keys(projAllocPhases).filter((k) => k !== '__none__'),
+        ]);
+        if (allPhaseIds.size > 0) {
           html += `<div class="tp-panel-phases">`;
-          for (const phaseId of phaseKeys) {
-            const phHours = projPhases[phaseId] || 0;
+          for (const phaseId of allPhaseIds) {
+            const phLogged = projPhases[phaseId] || 0;
+            const phAllocated = projAllocPhases[phaseId] || 0;
             const phName = phaseNames[phaseId] || 'Unknown Phase';
-            const phDisplay = isMonthView && phHours === 0 ? '' : ns.formatHours(phHours);
+
+            // Display: "Xh / Yh" if allocated, else just "Xh"
+            let phDisplay;
+            if (isMonthView && phLogged === 0 && phAllocated === 0) {
+              phDisplay = '';
+            } else if (phAllocated > 0) {
+              phDisplay = ns.formatHours(phLogged) + ' / ' + ns.formatHours(phAllocated);
+            } else {
+              phDisplay = ns.formatHours(phLogged);
+            }
+
             html += `
               <div class="tp-panel-phase-row">
                 <span class="tp-panel-phase-border" style="border-color:${safeCol}"></span>
