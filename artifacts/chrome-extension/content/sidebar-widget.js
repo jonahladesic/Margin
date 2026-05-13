@@ -16,7 +16,6 @@
   /* ── State ── */
   let stripEl = null;
   let panelEl = null;
-  let backdropEl = null;
   let injected = false;
   let panelOpen = false;
   let showTeam = false;
@@ -263,20 +262,13 @@
   function ensurePanel() {
     if (panelEl && document.body.contains(panelEl)) return;
 
-    // Backdrop
-    backdropEl = document.createElement('div');
-    backdropEl.id = 'tp-panel-backdrop';
-    backdropEl.className = 'tp-panel-backdrop';
-    backdropEl.addEventListener('click', () => togglePanel(false));
-    document.body.appendChild(backdropEl);
-
-    // Panel
+    // Panel — no blocking backdrop so GCal stays interactive
     panelEl = document.createElement('div');
     panelEl.id = 'tp-panel';
     panelEl.className = 'tp-panel';
     document.body.appendChild(panelEl);
 
-    // Escape key
+    // Escape key to close
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && panelOpen) togglePanel(false);
     });
@@ -284,7 +276,6 @@
     // Restore persisted state
     if (panelOpen) {
       panelEl.classList.add('tp-panel-open');
-      backdropEl.classList.add('tp-backdrop-visible');
     }
   }
 
@@ -293,9 +284,6 @@
 
     if (panelEl) {
       panelEl.classList.toggle('tp-panel-open', panelOpen);
-    }
-    if (backdropEl) {
-      backdropEl.classList.toggle('tp-backdrop-visible', panelOpen);
     }
 
     // Persist

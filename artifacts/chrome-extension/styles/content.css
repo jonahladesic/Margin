@@ -264,26 +264,7 @@
 
 
 /* ================================================================
- * PANEL BACKDROP
- * ================================================================ */
-.tp-panel-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 99990;
-  background: rgba(0, 0, 0, 0.18);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.22s ease;
-}
-
-.tp-panel-backdrop.tp-backdrop-visible {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-
-/* ================================================================
- * SLIDE-OUT PANEL — 380px, right edge
+ * SLIDE-OUT PANEL — 380px, right edge, non-blocking
  * ================================================================ */
 .tp-panel {
   position: fixed;
@@ -737,11 +718,6 @@
 
   .tp-sidebar-strip:hover .tp-strip-inner {
     background: rgba(255, 255, 255, 0.04);
-  }
-
-  /* Backdrop */
-  .tp-panel-backdrop {
-    background: rgba(0, 0, 0, 0.4);
   }
 
   /* Panel */
