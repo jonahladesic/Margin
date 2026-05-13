@@ -163,6 +163,17 @@
   letter-spacing: 0.06em;
 }
 
+.tp-menu-alloc-badge {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--tp-accent);
+  background: var(--tp-bg-active);
+  padding: 1px 6px;
+  border-radius: 6px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 .tp-menu-empty {
   padding: 14px 14px 16px;
   color: var(--tp-text-muted);
