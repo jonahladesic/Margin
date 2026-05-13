@@ -426,8 +426,12 @@
           hoursDisplay = ns.formatHours(logged);
         }
 
+        // Drag title for this project (used for FOCUS block creation)
+        const dragTitle = 'FOCUS: ' + project.name;
+
         html += `
-          <div class="tp-panel-card">
+          <div class="tp-panel-card tp-draggable" draggable="true"
+               data-drag-title="${esc(dragTitle)}" data-drag-color="${safeCol}">
             <div class="tp-panel-card-header">
               <span class="tp-panel-card-dot" style="background:${safeCol}"></span>
               <span class="tp-panel-card-name">${esc(project.name)}</span>
@@ -464,8 +468,10 @@
               phDisplay = ns.formatHours(phLogged);
             }
 
+            const phaseDragTitle = 'FOCUS: ' + project.name + ' - ' + phName;
             html += `
-              <div class="tp-panel-phase-row">
+              <div class="tp-panel-phase-row tp-draggable" draggable="true"
+                   data-drag-title="${esc(phaseDragTitle)}" data-drag-color="${safeCol}">
                 <span class="tp-panel-phase-border" style="border-color:${safeCol}"></span>
                 <span class="tp-panel-phase-label">${esc(phName)}</span>
                 <span class="tp-panel-phase-hours">${phDisplay}</span>
@@ -538,6 +544,34 @@
         if (ns.storage && ns.storage.extensionAlive && ns.storage.extensionAlive()) {
           try { chrome.storage.local.set({ _tp_refresh: Date.now() }); } catch (_) {}
         }
+      });
+    }
+
+    // ── Bind drag-to-create on project cards and phase rows ──
+    if (ns.dragToCreate) {
+      panelEl.querySelectorAll('.tp-draggable').forEach((el) => {
+        el.addEventListener('dragstart', (e) => {
+          const title = el.dataset.dragTitle || 'FOCUS:';
+          const color = el.dataset.dragColor || '#6366f1';
+          e.dataTransfer.setData('text/plain', title);
+          e.dataTransfer.effectAllowed = 'copy';
+
+          // Create a custom drag image
+          const ghost = document.createElement('div');
+          ghost.className = 'tp-drag-ghost';
+          ghost.textContent = title;
+          ghost.style.background = color;
+          document.body.appendChild(ghost);
+          e.dataTransfer.setDragImage(ghost, 0, 0);
+          // Clean up ghost after a tick
+          setTimeout(() => ghost.remove(), 0);
+
+          ns.dragToCreate.setDragData({ title, projectColor: color });
+        });
+
+        el.addEventListener('dragend', () => {
+          if (ns.dragToCreate) ns.dragToCreate.clearDragData();
+        });
       });
     }
   }

@@ -163,6 +163,7 @@
     ns.viewDetector.init();
     ns.domObserver.init(refresh);
     ns.sidebarWidget.init();
+    ns.dragToCreate.init();
     ns.contextMenu.init(refresh);
 
     // React to view changes

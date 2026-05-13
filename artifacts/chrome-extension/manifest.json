@@ -34,6 +34,7 @@
         "content/event-coloring.js",
         "content/context-menu.js",
         "content/sidebar-widget.js",
+        "content/drag-to-create.js",
         "content/content.js"
       ],
       "css": ["styles/content.css"],

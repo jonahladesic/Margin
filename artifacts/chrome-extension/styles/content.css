@@ -644,6 +644,55 @@
 
 
 /* ================================================================
+ * DRAG-TO-CREATE
+ * ================================================================ */
+
+/* Draggable items in the panel */
+.tp-draggable {
+  cursor: grab;
+}
+
+.tp-draggable:active {
+  cursor: grabbing;
+}
+
+/* Drag ghost (custom drag image) */
+.tp-drag-ghost {
+  position: fixed;
+  top: -200px;
+  left: -200px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 999999;
+}
+
+/* Time indicator that follows cursor during drag */
+.tp-drag-indicator {
+  position: fixed;
+  z-index: 999999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  background: #111827;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
+  border-radius: 6px;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  font-variant-numeric: tabular-nums;
+}
+
+
+/* ================================================================
  * EVENT COLORING OVERRIDES
  *
  * Two-tier painting:
